@@ -1,12 +1,11 @@
 ﻿import paramiko
 import logging
-import getpass
-from tqdm import tqdm
-
 
 # Настройка логирования
 logging.getLogger("paramiko").setLevel(logging.CRITICAL)
-logging.basicConfig(filename="result.txt", filemode='a', level=logging.INFO, format="%(asctime)s - %(message)s", encoding="utf-8")
+
+# Настройка логирования только для твоих сообщений
+logging.basicConfig(filename="result.txt", level=logging.INFO, format="%(asctime)s - %(message)s", encoding="utf-8")
 
 def execute_command_on_server(host, username, password, command):
     try:
@@ -36,12 +35,19 @@ def execute_command_on_server(host, username, password, command):
         logging.error(f"Ошибка на сервере {host}: {e}")
         print(f"Ошибка на сервере {host}: {e}")
 
-# Входные данные
-hosts = ["10.12.151.250"]
-username = input("Введите логин: ")
-password = getpass.getpass("Введите пароль: ")
-#command = "echo -e 'проверка добавления' | sudo tee -a /home/markovskoy_vv/test && cat /home/markovskoy_vv/test"
-command = input("Введите команду Linux: ")
+def run_ssh_commands(hosts, username, password, command):
+    for host in hosts:
+        execute_command_on_server(host, username, password, command)
 
-for host in hosts:
-    execute_command_on_server(host, username, password, command)
+# Входные данные
+hosts = ["10.13.192.10"
+]
+     
+username = "markovskoy_vv"
+#password = getpass.getpass("Введите пароль: ")
+password = "GGg123321gGG!!"
+#command = "echo -e 'проверка добавления' | sudo tee -a /home/markovskoy_vv/test && cat /home/markovskoy_vv/test"
+#command = input("Введите команду Linux: ")
+command = "crontab -l | grep USE_OR"
+# Запуск
+run_ssh_commands(hosts, username, password, command)
