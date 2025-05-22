@@ -3,9 +3,11 @@
 . /home/oraupd/.bash_profile
 bdauth=
 bduser=
-DBSID="rcdb"
+DBSID=""
 ZBX_M="rc_cli_state"
-ZBX_SENDER=`which zabbix_sender`
+ZBX_SENDER=$(`which zabbix_sender`)
+ZBX_CONFIG="/etc/zabbix/zabbix_agentd.conf"
+ZBX_HOST=$(hostname)
 
 
 tmpfile=/tmp/$(uuidgen).tmp
@@ -41,5 +43,6 @@ do
     [ "$(date +%s)" -gt "$F_TIME" ] && break
     sleep 10m
 done
-$ZBX_SENDER -s $(hostname) -c /etc/zabbix/zabbix_agentd.conf -k $ZBX_M -o "$RESULT"
+$ZBX_SENDER -s "$ZBX_HOST" -c "$ZBX_CONFIG" -k $ZBX_M -o "$RESULT"
 rm -f $tmpfile
+exit 0
