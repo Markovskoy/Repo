@@ -6,7 +6,7 @@ services:
     ports:
       - "2222:22"
     volumes:
-      - ../command_to_server/com_to_serv.py:/root/scripts/com_to_serv.py
+      - ../command_to_server:/root/scripts/command_to_server
 
   ssh2:
     build: ./servers
