@@ -1,0 +1,19 @@
+﻿version: "3.9"
+
+services:
+  ssh1:
+    build: ./servers
+    ports:
+      - "2222:22"
+    volumes:
+      - ../command_to_server/com_to_serv.py:/root/scripts/com_to_serv.py
+
+  ssh2:
+    build: ./servers
+    ports:
+      - "2223:22"
+
+  ssh3:
+    build: ./servers
+    ports:
+      - "2224:22"
