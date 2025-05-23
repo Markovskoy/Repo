@@ -3,6 +3,9 @@
 services:
   ssh1:
     build: ./servers
+    networks:
+      net:
+        ipv4_address: 172.30.0.10
     ports:
       - "2222:22"
     volumes:
@@ -10,10 +13,23 @@ services:
 
   ssh2:
     build: ./servers
+    networks:
+      net:
+        ipv4_address: 172.30.0.11
     ports:
       - "2223:22"
 
   ssh3:
     build: ./servers
+    networks:
+      net:
+        ipv4_address: 172.30.0.12
     ports:
       - "2224:22"
+
+networks:
+  net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16
