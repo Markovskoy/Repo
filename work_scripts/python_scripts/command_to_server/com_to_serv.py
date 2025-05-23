@@ -81,14 +81,29 @@ def load_hosts_from_yaml(filepath):
         logger.error(f"В файле {filepath} нет ключа 'servers'")
         print(f"Ошибка: в файле нет ключа 'servers'")
         sys.exit(1)
-    return data["servers"]
-
+    
+    hosts = []
+    for entry in data["servers"]:
+        parts = entry.strip().split()
+        if len(parts) != 2:
+            logger.error(f"Неверный формат записи сервера: {entry}")
+            print(f"Ошибка: неверный формат записи сервера: {entry}")
+            sys.exit(1)
+        host = parts[0]
+        try:
+            port = int(parts[1])
+        except ValueError:
+            logger.error(f"Порт должен быть числом: {parts[1]}")
+            print(f"Ошибка: порт должен быть числом: {parts[1]}")
+            sys.exit(1)
+        hosts.append({"host": host, "port": port})
+    return hosts
 # Функция для выполнения команд на сервере
-def execute_commands_on_server(host, username, password, commands):
+def execute_commands_on_server(host, port, username, password, commands):
     try:
         with paramiko.SSHClient() as client:
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(host, port=22, username=username, password=password, timeout=5)
+            client.connect(host, port, username=username, password=password, timeout=5)
             logger.info(f"Подключение к серверу {host}")
 
             for command in commands:
@@ -113,13 +128,14 @@ def execute_commands_on_server(host, username, password, commands):
     except paramiko.AuthenticationException:
         logger.error(f"[{host}] Ошибка авторизации (неверный логин/пароль).")
         return False
-
+    except paramiko.SSHException as e:
+        logger.error(f"[{host}:{port}] SSH ошибка: {e}")
     except Exception as e:
         logger.error(f"Ошибка на сервере {host}: {e}")
         return False
 
 # Основная часть скрипта
-if __name__ == "__main__":
+def main():
     folder = os.path.join(".", "servers")
     if not os.path.isdir(folder):
         logger.error(f"Папка {folder} не найдена.")
@@ -143,7 +159,7 @@ if __name__ == "__main__":
     # Параллельное выполнение
     results = []
     with ThreadPoolExecutor(max_workers=8) as executor:
-        future_to_host = {executor.submit(execute_commands_on_server, host, username, password, commands): host for host in hosts}
+        future_to_host = {executor.submit(execute_commands_on_server, host_info['host'], host_info['port'], username, password, commands): host_info for host_info in hosts}
         for future in tqdm(as_completed(future_to_host), total=len(hosts), desc="Выполнение команд"):
             host = future_to_host[future]
             try:
@@ -151,3 +167,6 @@ if __name__ == "__main__":
                 results.append((host, result))
             except Exception as exc:
                 logger.error(f"[{host}] Ошибка выполнения: {exc}")
+
+if __name__ == "__main__":
+    main()
