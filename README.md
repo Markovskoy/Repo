@@ -1,4 +1,4 @@
-# 🧠 My's Automation & Pet Projects Portfolio
+# 🧠 My Automation & Pet Projects Portfolio
 
 ![Language](https://img.shields.io/badge/language-Bash%2C%20Python%2C%20SQL%2C%20Dockerfile-blue)
 ![Purpose](https://img.shields.io/badge/type-Portfolio-important)
