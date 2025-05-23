@@ -1,3 +1,12 @@
+
+![Language](https://img.shields.io/badge/language-Bash%2C%20Python%2C%20SQL-blue)
+![Purpose](https://img.shields.io/badge/type-Portfolio-important)
+![Status](https://img.shields.io/badge/status-Demo-lightgrey)
+![Updated](https://img.shields.io/github/last-commit/Markovskoy/Repo)
+![Size](https://img.shields.io/github/repo-size/Markovskoy/Repo)
+
+
+
 ## Описание
 
 Этот репозиторий содержит рабочие скрипты (`work_scripts`), которые я использую на работе (или писал для работы), а также пет-проекты (будущие) (`pet_project`). 
