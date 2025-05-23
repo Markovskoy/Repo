@@ -17,9 +17,7 @@ work_scripts/
     powershell_scripts/
     python_scripts/
         command_to_server/
-            servers/
         docker_server_for_test/
-            servers/
     sql_scripts/
 ```
 
