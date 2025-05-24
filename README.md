@@ -50,15 +50,6 @@ Repo/
 
 ---
 
-## 📽️ GIF-примеры (демо)
-
-
-| 📜 Bash CLI    | 🐍 Python + Docker |
-|----------------|--------------------|
-| ![bash](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNzYwZGE3dWgyYjRxbXYzdW5hNG90emVoaWlscDFreGRvZXhxODZ4ZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/kauJgX1GxsAZlVEB4K/giphy.gif) | ![docker](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNjRrMHNxZmpya21meHFwbmE3aWdjOGdmcHEzZ2lkam5rYXk5MWF1aiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/jAeRzFOAyQs07GndbU/giphy.gif) |
-
----
-
 ## 📝 Примечание
 
 Этот репозиторий задуман как **портфолио**, а не production-проект. 
