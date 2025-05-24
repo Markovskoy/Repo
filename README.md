@@ -17,9 +17,9 @@
 Repo/
 ├── work_scripts/          # Автоматизация и полезные скрипты
 │   ├── bash_scripts/        # CLI-утилиты, мониторинг, работа с Zabbix
-│   ├── powershell_scripts/  # Windows-инструменты и диагностика
-│   ├── python_scripts/      # Интеграции, Docker-сервисы
-│   └── sql_scripts/         # Аналитика и мониторинг БД
+│   ├── powershell_scripts/  # Скрипты автоматизации, мониторинга
+│   ├── python_scripts/      # Интеграции, Docker-сервисы, Автоматизация
+│   └── sql_scripts/         # SQL скрипты, merge, CRUD, аналитика
 │
 └── pet_project/           # Учебные и демонстрационные мини-проекты
     ├── Main_pet_project/
