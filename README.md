@@ -12,19 +12,18 @@
 ---
 
 ## 🗂️ Содержание
-
-- [work_scripts/](work_scripts/)
-  - [bash_scripts/](work_scripts/bash_scripts/)
-  - [powershell_scripts/](work_scripts/powershell_scripts/)
-  - [python_scripts/](work_scripts/python_scripts/)
-    - [command_to_server/](work_scripts/python_scripts/command_to_server/)
-  - [sql_scripts/](work_scripts/sql_scripts/)
-- [pet_project/](pet_project/)
-  - [Main_pet_project/](pet_project/Main_pet_project/)
-  - [mini_pet_project/](pet_project/mini_pet_project/)
-  - [docker_server_for_test/](pet_project/docker_server_for_test/)
-
-
+```bash
+Repo/
+├── work_scripts/            # Автоматизация и полезные скрипты
+│   ├── bash_scripts/        # CLI-утилиты, мониторинг, работа с Zabbix
+│   ├── powershell_scripts/  # Windows-инструменты и диагностика
+│   ├── python_scripts/      # Интеграции, Docker-сервисы
+│   └── sql_scripts/         # Аналитика и мониторинг БД
+│          
+└── pet_project/             # Учебные и демонстрационные мини-проекты
+    ├── Main_pet_project/
+    └── mini_pet_project/
+```
 
 ---
 
