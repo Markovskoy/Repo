@@ -13,7 +13,7 @@
 
 ## 🗂️ Содержание
 
-```bash
+
 Repo/
 ├── [work_scripts](/work_scripts/)/          # Автоматизация и полезные скрипты
 │   ├── bash_scripts/        # CLI-утилиты, мониторинг, работа с Zabbix
@@ -24,7 +24,7 @@ Repo/
 └── pet_project/           # Учебные и демонстрационные мини-проекты
     ├── Main_pet_project/
     └── mini_pet_project/
-```
+
 
 ---
 
@@ -35,7 +35,7 @@ Repo/
 | Bash        | [`CLI.sh`](work_scripts/bash_scripts/CLI.sh) | Мониторинг ETL-процессов, интеграция с Zabbix          |
 | Python      | [`command_to_server`](work_scripts/python_scripts/command_to_server/) | Интеграции, автоматизация задач                        |
 | PowerShell  | [`Search_UserEvents.ps1`](work_scripts/powershell_scripts/Search_UserEvents.ps1) | Проверка и логирование состояния служб Windows         |
-| SQL         | [`active_session.sql`](work_scripts/sql_scripts/active_session.sql) | Анализ производительности БД и диагностика сессий      |
+| SQL         | [`Search_Objects.sql`](work_scripts/sql_scripts/Search_Objects.sql) | Анализ производительности БД и диагностика сессий, CRUD      |
 | Docker      | [`docker_server_for_test`](work_scripts/python_scripts/docker_server_for_test/) | Разворачивание изолированной среды в Docker            |
 
 
