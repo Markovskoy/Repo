@@ -34,7 +34,7 @@ Repo/
 | Bash        | [`CLI.sh`](https://github.com/Markovskoy/Repo/blob/main/work_scripts/bash_scripts/khd.sh) | Мониторинг ETL-процессов, интеграция с Zabbix          |
 | Python      | [`command_to_server`](https://github.com/Markovskoy/Repo/blob/main/work_scripts/python_scripts/command_to_server/) | Интеграции, автоматизация задач                        |
 | PowerShell  | [`Search_UserEvents.ps1`](https://github.com/Markovskoy/Repo/blob/main/work_scripts/powershell_scripts/Search_UserEvents.ps1) | Проверка и логирование состояния служб Windows         |
-| SQL         | [`Search_Objects.sql`](https://github.com/Markovskoy/Repo/blob/main/work_scripts/sql_scripts/Search_Objects.sql) | Анализ производительности БД и диагностика сессий, CRUD      |
+| SQL         | [`Search_Objects.sql`](https://github.com/Markovskoy/Repo/blob/main/work_scripts/sql_scripts/Search_Objects.sql) | Анализ производительности БД и диагностика сессий      |
 | Docker      | [`docker_server_for_test`](https://github.com/Markovskoy/Repo/blob/main/work_scripts/python_scripts/docker_server_for_test/) | Разворачивание изолированной среды в Docker            |
 
 
