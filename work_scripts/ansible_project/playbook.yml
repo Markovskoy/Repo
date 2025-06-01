@@ -1,0 +1,14 @@
+- name: Copy bash_script to all_servers
+  hosts: all
+  tasks:
+    - name: Create folder
+      file:
+        path: /home/local/scripts_sh
+        state: directory
+        mode: '0755'
+
+    - name: Copy sh scripts
+      copy:
+        src: ../bash_scripts/CLI.sh
+        dest: /home/local/scripts_sh/CLI.sh
+        mode: '0755'
