@@ -1,3 +1,4 @@
+---
 - name: Copy bash_script to all_servers
   hosts: all
   tasks:
