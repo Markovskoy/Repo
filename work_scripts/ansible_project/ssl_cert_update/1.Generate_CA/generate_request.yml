@@ -1,0 +1,67 @@
+﻿---
+- name: Generate SSL certificate request on APP1
+  hosts: app1_рц
+  become: true
+  gather_facts: true
+
+  vars:
+    cert_base_name: "s{{ inventory_hostname_short[1:7] }}app.corp.tander.ru"
+    zip_name: "dns_{{ inventory_hostname_short[1:7] }}.zip"
+
+  tasks:
+
+    - name: Only run on APP1
+      ansible.builtin.meta: end_play
+      when: not inventory_hostname_short.endswith("app1")
+
+    - name: Ensure keys directory exists
+      file:
+        path: /root/keys
+        state: directory
+        mode: '0755'
+
+    - name: Fail if openssl_srv.cnf not exists
+      stat:
+        path: /root/keys/openssl_srv.cnf
+      register:  openssl_config_stat
+
+    - name: Fail if openssl_srv.cnf is missing
+      fail:
+        msg: "Файл openssl_srv.cnf не найден в /root/keys. Пожалуйста, добавьте его вручную."
+      when: not  openssl_config_stat.stat.exists
+
+    - name: Fail if private.key not exists
+      stat:
+        path: /root/keys/private.key
+      register: private_key_stat
+
+    - name: Fail if private.key is missing
+      fail:
+        msg: "Файл private.key не найден в /root/keys. Пожалуйста, добавьте его вручную."
+      when: not private_key_stat.stat.exists
+
+    - name: Generate CSR (перезапись, если файл уже существует)
+      command: >
+        openssl req -new
+        -config /root/keys/openssl_srv.cnf
+        -key /root/keys/private.key
+        -out /root/keys/{{ cert_base_name }}.csr
+
+    - name: Create zip archive with CSR and config
+      archive:
+        path:
+          - /root/keys/{{ cert_base_name }}.csr
+          - /root/keys/openssl_srv.cnf
+        dest: /root/keys/{{ zip_name }}
+        format: zip
+        mode: '0644'
+    
+    - name: Копируем архив с удаленного сервера на управляющий узел
+      fetch:
+        src: /root/keys/{{ zip_name }}
+        dest: ./CA/
+        flat: yes
+        
+    - name: Инструкция по следующему шагу
+      debug:
+        msg: "CSR архив создан: /certs/{{ zip_name }}. Добавьте этот архив при создании запроса в ШПС Запрос SSL сертификата."

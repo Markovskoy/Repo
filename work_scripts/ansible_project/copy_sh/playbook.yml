@@ -9,6 +9,6 @@
 
     - name: Copy sh scripts
       copy:
-        src: ../bash_scripts/CLI.sh
+        src: .../bash_scripts/CLI.sh
         dest: /home/local/scripts_sh/CLI.sh
         mode: '0755'
