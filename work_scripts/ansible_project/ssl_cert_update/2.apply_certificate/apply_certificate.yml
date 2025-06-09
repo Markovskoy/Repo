@@ -1,0 +1,117 @@
+﻿---
+- name: Apply SSL certificates on APP servers
+  hosts: app1_рц,app2_рц
+  become: true
+  gather_facts: true
+
+  vars:
+    cert_base_name: "s{{ inventory_hostname_short[1:7] }}app.corp.tander.ru"
+    local_cert_path: "./dir_certs"
+    keys_dir: "/root/keys"
+
+  tasks:
+
+    - name: Определяем, на каком сервере находимся (APP1 или APP2)
+      set_fact:
+        is_app1: "{{ inventory_hostname_short.endswith('app1') }}"
+
+    - name: Ensure keys directory exists on remote
+      file:
+        path: /root/keys
+        state: directory
+        mode: '0755'
+
+    - name: Copy .cer from control machine to remote (force overwrite)
+      copy:
+        src: "{{ local_cert_path }}/{{ cert_base_name }}.cer"
+        dest: /root/keys/{{ cert_base_name }}.cer
+        mode: '0644'
+        force: true  
+
+    - name: Debug message after successful copy
+      debug:
+        msg: "Файл {{ cert_base_name }}.cer скопирован в /root/keys/ и перезаписан, если уже существовал."
+
+    - name: Fail if bundle.pem missing on APP1
+      when: is_app1
+      stat:
+        path: "{{ keys_dir }}/bundle.pem"
+      register: bundle_file
+
+    - name: Fail if bundle.pem missing on APP1
+      when: is_app1 and not bundle_file.stat.exists
+      fail:
+        msg: "Файл bundle.pem отсутствует в {{ keys_dir }}"
+
+    - name: На APP1 — проверяем приватный ключ
+      when: is_app1
+      stat:
+        path: "{{ keys_dir }}/private.key"
+      register: private_key_file
+
+    - name: Fail if private.key missing on APP1
+      when: is_app1 and not private_key_file.stat.exists
+      fail:
+        msg: "Файл private.key отсутствует в {{ keys_dir }}"
+
+    - name: На APP1 — проверяем файлы и создаём bundle (если нужно)
+      when: is_app1
+      block:
+        - name: Скачать CA.zip, распаковать, конвертировать корневой сертификат
+          shell: |
+            cd {{ keys_dir }}
+            wget -c http://ca.corp.tander.ru/pki/CA.zip
+            unzip -o CA.zip
+            openssl x509 -inform der -in CA/TanderRootCA.crt -out TanderRootCA.pem
+
+        - name: Создать новый bundle.pem (объединить cer, промежуточный и корневой)
+          shell: |
+            cd {{ keys_dir }}
+            rm -f bundle.pem
+            cat {{ cert_base_name }}.cer > bundle.pem
+            cat CA/TanderCorpCA.crt >> bundle.pem
+            cat TanderRootCA.pem >> bundle.pem
+
+        - name: Копируем сертификаты с соответствующего APP1
+          hosts: app2_рц
+          become: true
+          tasks:
+            - name: Забираем файлы с парного APP1
+              synchronize:
+                src: "/root/keys/"
+                dest: "/root/keys/"
+                recursive: yes
+                rsync_opts:
+                  - "--include=bundle.pem"
+                  - "--include=private.key"
+                  - "--include={{ cert_base_name }}.cer"
+                  - "--exclude=*"
+              delegate_to: "{{ hostvars[partner_app1].inventory_hostname }}"
+
+    - name: Копируем сертификаты в nginx директорию
+      copy:
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - { src: "{{ keys_dir }}/bundle.pem", dest: "/etc/nginx/conf.d/ssl/bundle.pem" }
+        - { src: "{{ keys_dir }}/{{ cert_base_name }}.cer", dest: "/etc/nginx/conf.d/ssl/cert.pem" }
+        - { src: "{{ keys_dir }}/private.key", dest: "/etc/nginx/conf.d/ssl/private.key" }
+
+    - name: Проверяем конфигурацию nginx
+      command: nginx -t
+      register: nginx_test
+      failed_when: nginx_test.rc != 0
+      changed_when: false
+
+    - name: Перезапускаем nginx, если конфиг корректен
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Инструкция
+      debug:
+        msg: |
+          Сертификаты применены. Проверьте корректность в АРМ РЦ и на балансире.
