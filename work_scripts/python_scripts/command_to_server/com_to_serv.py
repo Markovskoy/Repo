@@ -13,16 +13,6 @@ from cryptography.fernet import Fernet
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# === Проверка зависимостей ===
-try:
-    import paramiko
-    import yaml
-    from tqdm import tqdm
-    from cryptography.fernet import Fernet
-except ImportError as e:
-    print(f"[ОШИБКА] Не найдена библиотека: {e.name}. Установите зависимости командой:\n\npip install -r requirements.txt")
-    sys.exit(1)
-
 # === Константы ===
 CRED_DIR = os.path.expanduser("~/.com_to_serv")
 CRED_FILE = os.path.join(CRED_DIR, "cred")
@@ -243,6 +233,16 @@ def main_menu(servers, username, password):
 
 # === Точка входа ===
 def main():
+    # === Проверка зависимостей ===
+    try:
+        import paramiko
+        import yaml
+        from tqdm import tqdm
+        from cryptography.fernet import Fernet
+    except ImportError as e:
+        print(f"[ОШИБКА] Не найдена библиотека: {e.name}. Установите зависимости командой:\n\npip install -r requirements.txt")
+        sys.exit(1)
+
     global logger
     logger = setup_logging()
     folder = os.path.join(".", "servers")
