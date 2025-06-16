@@ -1,0 +1,4 @@
+﻿paramiko
+pyyaml
+tqdm
+cryptography
