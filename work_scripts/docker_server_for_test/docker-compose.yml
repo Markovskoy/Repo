@@ -11,7 +11,7 @@ services:
     volumes:
       - ../python_scripts/command_to_server:/root/scripts/command_to_server
       - ssh1-root:/root
-
+      - ssh1-etc-ssh:/etc/ssh
   ssh2:
     build: ./servers
     networks:
@@ -21,6 +21,7 @@ services:
       - "2223:22"
     volumes:
       - ssh2-root:/root
+      - ssh2-etc-ssh:/etc/ssh
   ssh3:
     build: ./servers
     networks:
@@ -30,6 +31,7 @@ services:
       - "2224:22"
     volumes:
       - ssh3-root:/root
+      - ssh3-etc-ssh:/etc/ssh
 networks:
   net:
     driver: bridge
@@ -41,3 +43,6 @@ volumes:
   ssh1-root:
   ssh2-root:
   ssh3-root:
+  ssh1-etc-ssh:
+  ssh2-etc-ssh:
+  ssh3-etc-ssh:
