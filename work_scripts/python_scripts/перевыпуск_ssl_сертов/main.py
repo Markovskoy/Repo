@@ -53,20 +53,36 @@ def get_hostname(ip, port, username, password):
 
 def find_all_app(app1_name, username, password, port=22, max_apps=5):
     cluster = {}
-    cluster['app1'] = {'hostname': app1_name}
 
-    base = app1_name.replace('app1', 'app{}')  # app2, app3 и т.д.
+    def connect_and_get_ip(hostname):
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(hostname=hostname, port=port, username=username, password=password, timeout=5)
+        stdin, stdout, stderr = client.exec_command("hostname -I")
+        ip = stdout.read().decode().strip().split()[0]  # берём первый IP
+        client.close()
+        return ip
+
+    try:
+        # Добавляем app1
+        ip1 = connect_and_get_ip(app1_name)
+        cluster['app1'] = {'hostname': app1_name, 'ip': ip1}
+        print(f"[+] Обнаружен: {app1_name} → {ip1}")
+    except Exception as e:
+        print(f"[-] Не удалось подключиться к {app1_name}: {e}")
+        return cluster
+
+    base = app1_name.replace('app1', 'app{}')
 
     for i in range(2, max_apps + 1):
         hostname_try = base.format(i)
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
-            client.connect(hostname=hostname_try, port=port, username=username, password=password, timeout=5)
-            cluster[f'app{i}'] = {'hostname': hostname_try}
-            client.close()
+            ip = connect_and_get_ip(hostname_try)
+            cluster[f'app{i}'] = {'hostname': hostname_try, 'ip': ip}
+            print(f"[+] Обнаружен: {hostname_try} → {ip}")
         except Exception as e:
-            break  # как только не смогли подключиться — заканчиваем
+            print(f"[-] Не удалось подключиться к {hostname_try}: {e}")
+            break
     return cluster
 
 def menu():
@@ -91,10 +107,10 @@ def main():
         if not hostname:
             continue
 
-        shortname = hostname.split('.')[0]  # app1
-        print(f"[+] Получено имя: {shortname} от {ip}")
+        app1_name = hostname.split('.')[0]  # app1
+        print(f"[+] Получено имя: {app1_name} от {ip}")
 
-        cluster = find_all_app(shortname, username, password, int(port))
+        cluster = find_all_app(app1_name, username, password, int(port))
         print("=== Обнаруженный кластер ===")
         for role, info in cluster.items():
             print(f"{role}: {info['hostname']}")
