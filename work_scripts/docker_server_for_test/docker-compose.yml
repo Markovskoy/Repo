@@ -11,7 +11,8 @@ services:
       - "2222:22"
     volumes:
       - ../python_scripts/command_to_server:/root/scripts/command_to_server
-      - ssh1-root:/root
+      - ssh1-ssh:/home/victor/.ssh
+      - ssh1-pip:/home/victor/.local
 
   ssh2:
     container_name: ssh2
@@ -22,7 +23,8 @@ services:
     ports:
       - "2223:22"
     volumes:
-      - ssh2-root:/root
+      - ssh2-ssh:/home/victor/.ssh
+      - ssh2-pip:/home/victor/.local
   ssh3:
     container_name: ssh3
     build: ./servers
@@ -32,7 +34,8 @@ services:
     ports:
       - "2224:22"
     volumes:
-      - ssh3-root:/root
+      - ssh3-ssh:/home/victor/.ssh
+      - ssh3-pip:/home/victor/.local
 networks:
   net:
     driver: bridge
@@ -41,6 +44,9 @@ networks:
         - subnet: 172.30.0.0/16
 
 volumes:
-  ssh1-root:
-  ssh2-root:
-  ssh3-root:
+  ssh1-ssh:
+  ssh2-ssh:
+  ssh3-ssh:
+  ssh1-pip:
+  ssh2-pip:
+  ssh3-pip:
