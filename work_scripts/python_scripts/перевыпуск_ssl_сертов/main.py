@@ -119,9 +119,9 @@ def generate_csr_on_app1(cluster,username, password):
 
      # === Шаги выполнения ===
     commands = [
-        "mkdir -p /root/keys",
-        f"cd /root/keys && sudo openssl req -new -config openssl_srv.cnf -key private.key -out s{shortname}.ru.csr",
-        f"cd /root/keys && zip dns_{shortname}.zip s{shortname}.ru.csr openssl_srv.cnf",
+        "sudo mkdir -p /root/keys",
+        f"sudo openssl req -new -config /root/keys/openssl_srv.cnf -key /root/keys/private.key -out /root/keys/s{shortname}.ru.csr",
+        f"sudo zip /root/keys/dns_{shortname}.zip /root/keys/s{shortname}.ru.csr /root/keys/openssl_srv.cnf",
         f"sudo cp /root/keys/dns_{shortname}.zip /tmp/dns_{shortname}.zip",
         f"sudo chmod 644 /tmp/dns_{shortname}.zip"
     ]
