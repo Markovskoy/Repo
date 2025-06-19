@@ -27,6 +27,7 @@ services:
       - ssh2-ssh:/home/victor/.ssh
       - ssh2-pip:/home/victor/.local
     entrypoint: /entrypoint.sh
+    
   ssh3:
     container_name: ssh3
     build: ./servers
@@ -39,6 +40,7 @@ services:
       - ssh3-ssh:/home/victor/.ssh
       - ssh3-pip:/home/victor/.local
     entrypoint: /entrypoint.sh
+
 networks:
   net:
     driver: bridge
