@@ -10,7 +10,7 @@ services:
     ports:
       - "2222:22"
     volumes:
-      - ../python_scripts/command_to_server:/root/scripts/command_to_server
+      - ../python_scripts/command_to_server:/home/victor/scripts/command_to_server
       - ssh1-ssh:/home/victor/.ssh
       - ssh1-pip:/home/victor/.local
 
