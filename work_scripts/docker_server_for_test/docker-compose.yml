@@ -14,6 +14,7 @@ services:
       - ssh1-root:/root
 
   ssh2:
+    container_name: ssh2
     build: ./servers
     networks:
       net:
@@ -23,6 +24,7 @@ services:
     volumes:
       - ssh2-root:/root
   ssh3:
+    container_name: ssh3
     build: ./servers
     networks:
       net:
