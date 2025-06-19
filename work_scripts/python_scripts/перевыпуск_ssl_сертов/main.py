@@ -51,23 +51,22 @@ def get_hostname(ip, port, username, password):
         print(f"[Ошибка] не удалось подключиться к {ip}:{port} - {e}")
         return None
 
-def find_all_app(start_hostname):
+def find_all_app(app1_name, username, password, port=22, max_apps=5):
     cluster = {}
-    shortname = start_hostname.split('.')[0]  # app1
-    try:
-        base = start_hostname.replace('app1', 'app{}')
-        for i in range(1, 4):
-            new_hostname = base.format(i)
-            try:
-                ip = socket.gethostbyname(new_hostname)
-                cluster[f'app{i}'] = {
-                    'hostname': new_hostname,
-                    'ip': ip
-                }
-            except socket.gaierror:
-                break
-    except Exception as e:
-        print(f"[Ошибка] Не удалось разобрать {start_hostname}: {e}")
+    cluster['app1'] = {'hostname': app1_name}
+
+    base = app1_name.replace('app1', 'app{}')  # app2, app3 и т.д.
+
+    for i in range(2, max_apps + 1):
+        hostname_try = base.format(i)
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(hostname=hostname_try, port=port, username=username, password=password, timeout=5)
+            cluster[f'app{i}'] = {'hostname': hostname_try}
+            client.close()
+        except Exception as e:
+            break  # как только не смогли подключиться — заканчиваем
     return cluster
 
 def menu():
@@ -91,12 +90,14 @@ def main():
         hostname = get_hostname(ip, int(port), username, password)
         if not hostname:
             continue
-        print(f"{ip}:{port} → DNS: {hostname}")
 
-        cluster = find_all_app(hostname)
-        print("Обнаружен кластер:")
+        shortname = hostname.split('.')[0]  # app1
+        print(f"[+] Получено имя: {shortname} от {ip}")
+
+        cluster = find_all_app(shortname, username, password, int(port))
+        print("=== Обнаруженный кластер ===")
         for role, info in cluster.items():
-            print(f"  {role}: {info['hostname']} ({info['ip']})")
+            print(f"{role}: {info['hostname']}")
 
     choise = menu()
     if choise == "1":
