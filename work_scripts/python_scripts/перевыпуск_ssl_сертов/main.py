@@ -53,6 +53,7 @@ def get_hostname(ip, port, username, password):
 
 def find_all_app(start_hostname):
     cluster = {}
+    shortname = start_hostname.split('.')[0]  # app1
     try:
         base = start_hostname.replace('app1', 'app{}')
         for i in range(1, 4):
