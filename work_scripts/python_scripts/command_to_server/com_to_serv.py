@@ -236,7 +236,6 @@ def send_file_scp(username, host, local_file, remote_path, password):
         subprocess.run(cmd, check=True)
         print(f"[OK] Файл отправлен на {host}")
 
-        # === Распаковка архива на сервере ===
         if unpack_remote:
             archive_remote = os.path.join(remote_path, os.path.basename(to_send))
             unpack_dir = remote_path
@@ -249,12 +248,17 @@ def send_file_scp(username, host, local_file, remote_path, password):
                 ssh.connect(hostname=host, username=username, password=password, timeout=5)
                 for cmd in unpack_cmds:
                     stdin, stdout, stderr = ssh.exec_command(cmd)
-                    stdout.channel.recv_exit_status()
+                    exit_status = stdout.channel.recv_exit_status()
+                    err = stderr.read().decode().strip()
+                    if err:
+                        logger.warning(f"[{host}] Ошибка при распаковке: {err}")
                 ssh.close()
 
     except subprocess.CalledProcessError as e:
+        logger.error(f"Не удалось отправить файл на {host}: {e}")
         print(f"[ERROR] Не удалось отправить файл на {host}: {e}")
     except Exception as e:
+        logger.error(f"Не удалось распаковать архив на {host}: {e}")
         print(f"[ERROR] Не удалось распаковать архив на {host}: {e}")
     finally:
         if cleanup and os.path.exists(to_send):
@@ -283,17 +287,17 @@ def execute_commands_on_server(host, port, username, password, command):
                 if com.strip().startswith("sudo"):
                     stdin.write(password + "\n")
                     stdin.flush()
-                output = stdout.read().decode()
-                error = stderr.read().decode()
-                if error and "password" not in error.lower():
-                    logger.warning(f"[{host}] Ошибка: {error.strip()}")
-                else:
+                output = stdout.read().decode().strip()
+                error = stderr.read().decode().strip()
+
+                if output:
                     logger.info(f"[{host}] Результат:\n{output}")
+                if error:
+                    logger.warning(f"[{host}] Ошибка:{error}")
         return True
     except Exception as e:
         logger.error(f"[{host}] Ошибка подключения: {e}")
         return False
-
 
 # === Главное меню ===
 def main_menu(servers, username, password):
