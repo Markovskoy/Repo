@@ -4,6 +4,7 @@ services:
   ssh1:
     container_name: ssh1
     build: ./servers
+    hostname: ssh_main
     networks:
       net:
         ipv4_address: 172.30.0.10
@@ -17,6 +18,8 @@ services:
   ssh2:
     container_name: ssh2
     build: ./servers
+    hostname: app1
+    domainname: localdomain.ru
     networks:
       net:
         ipv4_address: 172.30.0.11
@@ -29,6 +32,8 @@ services:
   ssh3:
     container_name: ssh3
     build: ./servers
+    hostname: app2
+    domainname: localdomain.ru
     networks:
       net:
         ipv4_address: 172.30.0.12
