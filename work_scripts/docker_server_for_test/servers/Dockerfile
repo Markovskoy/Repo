@@ -1,7 +1,8 @@
 ﻿FROM ubuntu:22.04
 
 # Установка SSH-сервера, Python3 и pip
-RUN apt-get update && apt-get install -y openssh-server python3 python3-pip mc && \
+RUN apt-get update && apt-get install -y sudo && \
+    apt-get install -y openssh-server python3 python3-pip mc && \
     mkdir /var/run/sshd && \
     # Установка пароля root: root
     echo 'root:root' | chpasswd && \
