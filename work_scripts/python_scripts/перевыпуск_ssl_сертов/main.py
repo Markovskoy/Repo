@@ -51,6 +51,23 @@ def get_hostname(ip, port, username, password):
         print(f"[Ошибка] не удалось подключиться к {ip}:{port} - {e}")
         return None
 
+def find_all_app(start_hostname):
+    cluster = {}
+    try:
+        base = start_hostname.replace('app1', 'app{}')
+        for i in range(1, 4):
+            new_hostname = base.format(i)
+            try:
+                ip = socket.gethostbyname(new_hostname)
+                cluster[f'app{i}'] = {
+                    'hostname': new_hostname,
+                    'ip': ip
+                }
+            except socket.gaierror:
+                break
+    except Exception as e:
+        print(f"[Ошибка] Не удалось разобрать {start_hostname}: {e}")
+    return cluster
 
 def menu():
     print("""
@@ -71,10 +88,14 @@ def main():
     for line in servers:
         ip, port = line.strip().split()
         hostname = get_hostname(ip, int(port), username, password)
-        if hostname:
-            print(f"{ip}:{port} -> DNS:{hostname}")
-        else:
-            print(f"DNS не получен с {ip}")
+        if not hostname:
+            continue
+        print(f"{ip}:{port} → DNS: {hostname}")
+
+        cluster = find_all_app(hostname)
+        print("Обнаружен кластер:")
+        for role, info in cluster.items():
+            print(f"  {role}: {info['hostname']} ({info['ip']})")
 
     choise = menu()
     if choise == "1":
