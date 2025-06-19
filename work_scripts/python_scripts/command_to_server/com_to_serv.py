@@ -29,6 +29,7 @@ try:
 except ImportError:
     missing.append("cryptography")
 
+
 if missing:
     print("[ОШИБКА] Не найдены библиотеки: " + ", ".join(missing))
     print("Установите зависимости командой:\n\npip install -r requirements.txt\n")
@@ -190,20 +191,31 @@ def get_all_files_to_send():
     if not os.path.isdir(folder):
         print("Папка 'to_remote' не найдена.")
         return []
-    files = []
-    for root, dirs, filenames in os.walk(folder):
-        for f in filenames:
-            files.append(os.path.join(root, f))
-    return files
+    entries = os.listdir(folder)
+    if not entries:
+        print("Папка 'to_remote' пуста.")
+        return []
+    print("Содержимое папки 'to_remote':")
+    for i, name in enumerate(entries):
+        path = os.path.join(folder, name)
+        icon = "📁" if os.path.isdir(path) else "📄"
+        print(f"{i+1}: {icon} {name}")
+    selected = input("Введите номера файлов через пробел (например: 1 3 5): ").strip()
+    indices = selected.split()
+    chosen = []
+    for idx in indices:
+        if idx.isdigit():
+            i = int(idx) - 1
+            if 0 <= i < len(entries):
+                chosen.append(os.path.join(folder, entries[i]))
+    return chosen
 
 # === Отправка файла по SCP с sshpass ===
 def send_file_scp(username, host, local_file, remote_path, password):
-    cmd = [
-        "sshpass", "-p", password,
-        "scp", "-o", "StrictHostKeyChecking=no",
-        local_file,
-        f"{username}@{host}:{remote_path}"
-    ]
+    if password and shutil.which("sshpass"):
+        cmd = ["sshpass", "-p", password, "scp", "-o", "StrictHostKeyChecking=no", local_file, f"{username}@{host}:{remote_path}"]
+    else:
+        cmd = ["scp", "-o", "StrictHostKeyChecking=no", local_file, f"{username}@{host}:{remote_path}"]
     try:
         print(f"\n[INFO] Отправка {local_file} на {host}:{remote_path} через SCP...")
         subprocess.run(cmd, check=True)
