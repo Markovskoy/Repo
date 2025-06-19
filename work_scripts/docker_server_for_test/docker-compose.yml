@@ -10,9 +10,9 @@ services:
     ports:
       - "2222:22"
     volumes:
-      - ../python_scripts/command_to_server:/home/victor/scripts/command_to_server
-      - ssh1-ssh:/root/.ssh
-      - ssh1-pip:/root/.local
+      - ../python_scripts/:/home/victor/scripts/
+      - ssh1-ssh:/home/victor/.ssh
+      - ssh1-pip:/home/victor/.local
 
   ssh2:
     container_name: ssh2
@@ -23,8 +23,8 @@ services:
     ports:
       - "2223:22"
     volumes:
-      - ssh2-ssh:/root/.ssh
-      - ssh2-pip:/root/.local
+      - ssh2-ssh:/home/victor/.ssh
+      - ssh2-pip:/home/victor/.local
     
   ssh3:
     container_name: ssh3
@@ -35,8 +35,8 @@ services:
     ports:
       - "2224:22"
     volumes:
-      - ssh3-ssh:/root/.ssh
-      - ssh3-pip:/root/.local
+      - ssh3-ssh:/home/victor/.ssh
+      - ssh3-pip:/home/victor/.local
 
 networks:
   net:

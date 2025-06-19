@@ -15,8 +15,6 @@ RUN apt-get update && apt-get install -y sudo && apt-get install less && \
     echo "victor:123321" | chpasswd && \
     usermod -aG sudo victor
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
 EXPOSE 22
-ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["/usr/sbin/sshd", "-D"]
