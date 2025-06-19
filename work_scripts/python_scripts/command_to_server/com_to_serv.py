@@ -78,6 +78,16 @@ def get_or_prompt_password():
     save_password_encrypted(password)
     return password
 
+# === Проверка имени пользователя и получение пароля ===
+def get_username_and_password():
+    current_user = os.getenv("USER") or os.getenv("USERNAME")
+    username = input("Введите имя пользователя: ").strip()
+    if username == current_user:
+        print("[INFO] Пароль не требуется: пользователь совпадает.")
+        return username, ""
+    password = get_or_prompt_password()
+    return username, password
+
 # === Логгирование ===
 def setup_logging():
     logger = logging.getLogger("multi_ssh")
@@ -159,35 +169,28 @@ def load_hosts_from_yaml(filepath):
     return hosts
 
 # === Выбор файла из папки ===
-def choose_local_file():
+def get_all_files_to_send():
     folder = os.path.join(".", "to_remote")
     if not os.path.isdir(folder):
         print("Папка 'to_remote' не найдена.")
-        return None, None
-    files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
-    if not files:
-        print("Нет файлов в папке 'to_remote'.")
-        return None, None
-    print("Доступные файлы:")
-    for i, f in enumerate(files):
-        print(f"{i+1}: {f}")
-    while True:
-        try:
-            idx = int(input("Выберите файл по номеру: ")) - 1
-            if 0 <= idx < len(files):
-                file_path = os.path.join(folder, files[idx])
-                remote_path = input("Куда отправить файл на сервере (например, /usr/local/bin): ").strip()
-                return file_path, remote_path
-        except ValueError:
-            pass
-        print("Некорректный ввод.")
+        return []
+    files = []
+    for root, dirs, filenames in os.walk(folder):
+        for f in filenames:
+            files.append(os.path.join(root, f))
+    return files
 
-# === Отправка файла по SCP ===
-def send_file_scp(username, host, local_file, remote_path):
-    scp_command = ["scp", local_file, f"{username}@{host}:{remote_path}"]
+# === Отправка файла по SCP с sshpass ===
+def send_file_scp(username, host, local_file, remote_path, password):
+    cmd = [
+        "sshpass", "-p", password,
+        "scp", "-o", "StrictHostKeyChecking=no",
+        local_file,
+        f"{username}@{host}:{remote_path}"
+    ]
     try:
         print(f"\n[INFO] Отправка {local_file} на {host}:{remote_path} через SCP...")
-        subprocess.run(scp_command, check=True)
+        subprocess.run(cmd, check=True)
         print(f"[OK] Файл отправлен на {host}")
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Не удалось отправить файл на {host}: {e}")
@@ -225,17 +228,19 @@ def execute_commands_on_server(host, port, username, password, command):
 def main_menu(servers, username, password):
     while True:
         print("""
-1. Отправить файл на сервера
+1. Отправить файлы на сервера
 2. Выполнить команду на серверах
 0. Выход
         """)
         choice = input("Введите номер действия: ").strip()
         if choice == "1":
-            file_path, remote_path = choose_local_file()
-            if not file_path:
+            files = get_all_files_to_send()
+            if not files:
                 continue
+            remote_path = input("Куда отправить файлы на сервере (например, /usr/local/bin): ").strip()
             for server in servers:
-                send_file_scp(username, server['host'], file_path, remote_path)
+                for file_path in files:
+                    send_file_scp(username, server['host'], file_path, remote_path, password)
         elif choice == "2":
             command = input("Введите команду: ").strip()
             if not command:
@@ -255,7 +260,6 @@ def main_menu(servers, username, password):
 
 # === Точка входа ===
 def main():
-    # === Проверка зависимостей ===
     global logger
     logger = setup_logging()
     folder = os.path.join(".", "servers")
@@ -264,9 +268,8 @@ def main():
         sys.exit(1)
     filepath = choose_file(folder)
     servers = load_hosts_from_yaml(filepath)
-    username = input("Введите имя пользователя: ")
-    password = get_or_prompt_password()
-    if not check_sudo_access(password):
+    username, password = get_username_and_password()
+    if password and not check_sudo_access(password):
         logger.error("Нет доступа к sudo. Завершение.")
         sys.exit(1)
     main_menu(servers, username, password)
