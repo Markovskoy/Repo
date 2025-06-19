@@ -2,6 +2,7 @@
 
 services:
   ssh1:
+    container_name: ssh1
     build: ./servers
     networks:
       net:
