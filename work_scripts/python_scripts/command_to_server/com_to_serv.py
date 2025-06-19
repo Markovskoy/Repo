@@ -82,9 +82,10 @@ def get_or_prompt_password():
 def get_username_and_password():
     current_user = os.getenv("USER") or os.getenv("USERNAME")
     username = input("Введите имя пользователя: ").strip()
-    if username == current_user:
-        print("[INFO] Пароль не требуется: пользователь совпадает.")
-        return username, ""
+    saved_password = load_password_encrypted()
+    if username == current_user and saved_password:
+        print("[INFO] Пароль не требуется: пользователь совпадает и пароль уже сохранён.")
+        return username, saved_password
     password = get_or_prompt_password()
     return username, password
 
@@ -128,6 +129,18 @@ def check_sudo_access(password):
         print(f"[ОШИБКА] Не удалось проверить sudo: {e}")
         return False
 
+# === Проверка SSH-доступности серверов ===
+def check_ssh_accessibility(servers, username, password):
+    print("\n[INFO] Проверка доступности SSH на серверах...")
+    for server in servers:
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(server['host'], port=server['port'], username=username, password=password, timeout=5)
+            print(f"[OK] Доступен: {server['host']}:{server['port']}")
+            client.close()
+        except Exception as e:
+            print(f"[ОШИБКА] {server['host']}:{server['port']} - {e}")
 # === Обработка сигналов ===
 def graceful_exit(signum, frame):
     print("\nЗавершение работы, закрытие соединений...")
@@ -269,6 +282,7 @@ def main():
     filepath = choose_file(folder)
     servers = load_hosts_from_yaml(filepath)
     username, password = get_username_and_password()
+    check_ssh_accessibility(servers, username, password)
     if password and not check_sudo_access(password):
         logger.error("Нет доступа к sudo. Завершение.")
         sys.exit(1)
