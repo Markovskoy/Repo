@@ -6,12 +6,34 @@ import getpass
 import signal
 import base64
 from datetime import datetime
-import yaml
-import paramiko
 import re
-from cryptography.fernet import Fernet
-from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+# === Проверка зависимостей ===
+missing = []
+try:
+    import yaml
+except ImportError:
+    missing.append("pyyaml")
+try:
+    import paramiko
+except ImportError:
+    missing.append("paramiko")
+try:
+    from tqdm import tqdm
+except ImportError:
+    missing.append("tqdm")
+try:
+    from cryptography.fernet import Fernet
+except ImportError:
+    missing.append("cryptography")
+
+if missing:
+    print("[ОШИБКА] Не найдены библиотеки: " + ", ".join(missing))
+    print("Установите зависимости командой:\n\npip install -r requirements.txt\n")
+    sys.exit(1)
+
 
 # === Константы ===
 CRED_DIR = os.path.expanduser("~/.com_to_serv")
@@ -234,15 +256,6 @@ def main_menu(servers, username, password):
 # === Точка входа ===
 def main():
     # === Проверка зависимостей ===
-    try:
-        import paramiko
-        import yaml
-        from tqdm import tqdm
-        from cryptography.fernet import Fernet
-    except ImportError as e:
-        print(f"[ОШИБКА] Не найдена библиотека: {e.name}. Установите зависимости командой:\n\npip install -r requirements.txt")
-        sys.exit(1)
-
     global logger
     logger = setup_logging()
     folder = os.path.join(".", "servers")
