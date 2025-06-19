@@ -85,6 +85,69 @@ def find_all_app(app1_name, username, password, port=22, max_apps=5):
             break
     return cluster
 
+def generate_csr_on_app1(cluster,username, password):
+    app1 = cluster.get('app1')
+    if not app1:
+        print("[Ошибка] В кластере нет app1")
+        return
+    hostname = app1['hostname']
+    ip = app1['ip']
+    port = 22
+
+    # подключаемся
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
+    except Exception as e:
+        print(f"[ОШИБКА] Не удалось подключиться к APP1 ({hostname}) → {e}")
+        return
+    
+    def run_sudo_command(cmd):
+        stdin, stdout, stderr = client.exec_command(f"sudo -S -p '' {cmd}", get_pty=True)
+        stdin.write(password + '\n')
+        stdin.flush()
+        out = stdout.read().decode()
+        err = stderr.read().decode()
+        return out, err
+
+    # === Получаем короткое имя ===
+    stdin, stdout, stderr = client.exec_command("hostname | cut -c 2-7")
+    shortname = stdout.read().decode().strip()
+
+    print(f"[i] Генерация CSR для: {shortname}")
+
+     # === Шаги выполнения ===
+    commands = [
+        "mkdir -p /root/keys",
+        f"cd /root/keys && sudo openssl req -new -config openssl_srv.cnf -key private.key -out s{shortname}.ru.csr",
+        f"cd /root/keys && zip dns_{shortname}.zip s{shortname}.ru.csr openssl_srv.cnf"
+    ]
+
+    for cmd in commands:
+        out, err = run_sudo_command(cmd)
+        if err:
+            print(f"[!] Ошибка при выполнении: {cmd}\n{err}")
+        else:
+            print(f"[+] Выполнено: {cmd}")
+    
+    # === Качаем архив себе ===
+    local_ca_dir = pathlib.Path("CA")
+    local_ca_dir.mkdir(exist_ok=True)
+
+    sftp = client.open_sftp()
+    remote_path = f"/root/keys/dns_{shortname}.zip"
+    local_path = str(local_ca_dir / f"dns_{shortname}.zip")
+    try:
+        sftp.get(remote_path, local_path)
+        print(f"[✓] Архив скачан в: {local_path}")
+    except Exception as e:
+        print(f"[ОШИБКА] Не удалось скачать архив: {e}")
+    finally:
+        sftp.close()
+        client.close()
+
+
 def menu():
     print("""
 Выберите действие:
@@ -118,6 +181,7 @@ def main():
     choise = menu()
     if choise == "1":
         print("Генерация CA")
+        generate_csr_on_app1(cluster, username, password)
     elif choise == "2":
         print("Применение серта")
     else:
