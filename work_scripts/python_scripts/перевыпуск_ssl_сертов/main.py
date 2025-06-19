@@ -107,9 +107,7 @@ def generate_csr_on_app1(cluster,username, password):
         stdin, stdout, stderr = client.exec_command(f"sudo -S -p '' {cmd}", get_pty=True)
         stdin.write(password + '\n')
         stdin.flush()
-        out = stdout.read().decode()
-        err = stderr.read().decode()
-        return out, err
+        return stdout.channel.recv_exit_status()  # 0 если успешно
 
     # === Получаем короткое имя ===
     stdin, stdout, stderr = client.exec_command("hostname")
@@ -127,11 +125,11 @@ def generate_csr_on_app1(cluster,username, password):
     ]
 
     for cmd in commands:
-        out, err = run_sudo_command(cmd)
-        if err:
-            print(f"[!] Ошибка при выполнении: {cmd}\n{err}")
-        else:
+        result = run_sudo_command(cmd)
+        if result == 0:
             print(f"[+] Выполнено: {cmd}")
+        else:
+            print(f"[!] Ошибка при выполнении: {cmd}")
     
     # === Качаем архив себе ===
     local_ca_dir = pathlib.Path("CA")
