@@ -104,43 +104,46 @@ def setup_logging():
     logger.addHandler(console_handler)
     return logger
 
-# === Проверка sudo ===
-def check_sudo_access(password):
-    print("\n[INFO] Проверка доступа sudo...")
-    try:
-        result = subprocess.run(["sudo", "-n", "true"], capture_output=True)
-        if result.returncode == 0:
-            print("[OK] Доступ к sudo есть.")
-            return True
-        else:
-            check = subprocess.run(
-                f"echo {password} | sudo -S true",
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            if check.returncode == 0:
-                print("[OK] Доступ к sudo подтверждён через пароль.")
-                return True
-            else:
-                print("[ОШИБКА] Неверный пароль или нет доступа к sudo.")
-                return False
-    except Exception as e:
-        print(f"[ОШИБКА] Не удалось проверить sudo: {e}")
-        return False
-
-# === Проверка SSH-доступности серверов ===
-def check_ssh_accessibility(servers, username, password):
-    print("\n[INFO] Проверка доступности SSH на серверах...")
-    for server in servers:
+# === Проверка SSH и sudo ===
+def check_ssh_and_sudo(servers, username, password):
+    accessible = []
+    inaccessible = []
+    no_sudo = []
+    
+    def check_one(server):
         try:
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             client.connect(server['host'], port=server['port'], username=username, password=password, timeout=5)
-            print(f"[OK] Доступен: {server['host']}:{server['port']}")
+            stdin, stdout, stderr = client.exec_command("sudo -n true")
+            exit_code = stdout.channel.recv_exit_status()
+            if exit_code != 0:
+                stdin, stdout, stderr = client.exec_command("sudo -S -v")
+                stdin.write(password + '\n')
+                stdin.flush()
+                if stdout.channel.recv_exit_status() != 0:
+                    no_sudo.append(server)
+                    return
+            accessible.append(server)
             client.close()
-        except Exception as e:
-            print(f"[ОШИБКА] {server['host']}:{server['port']} - {e}")
+        except Exception:
+            inaccessible.append(server)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        executor.map(check_one, servers)
+
+    print(f"\nДоступно по SSH и sudo: {len(accessible)} серверов")
+    if inaccessible:
+        print(f"Недоступны по SSH: {len(inaccessible)}")
+        for s in inaccessible:
+            print(f" - {s['host']}:{s['port']}")
+    if no_sudo:
+        print(f"Нет доступа к sudo: {len(no_sudo)}")
+        for s in no_sudo:
+            print(f" - {s['host']}:{s['port']}")
+
+    return accessible
+
 # === Обработка сигналов ===
 def graceful_exit(signum, frame):
     print("\nЗавершение работы, закрытие соединений...")
@@ -282,11 +285,11 @@ def main():
     filepath = choose_file(folder)
     servers = load_hosts_from_yaml(filepath)
     username, password = get_username_and_password()
-    check_ssh_accessibility(servers, username, password)
-    if password and not check_sudo_access(password):
-        logger.error("Нет доступа к sudo. Завершение.")
+    filtered = check_ssh_and_sudo(servers, username, password)
+    if not filtered:
+        print("Нет доступных серверов для работы.")
         sys.exit(1)
-    main_menu(servers, username, password)
+    main_menu(filtered, username, password)
 
 if __name__ == "__main__":
     main()
