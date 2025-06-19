@@ -213,16 +213,52 @@ def get_all_files_to_send():
 
 # === Отправка файла по SCP с sshpass ===
 def send_file_scp(username, host, local_file, remote_path, password):
+    to_send = local_file
+    cleanup = False
+    unpack_remote = False
+    archive_name = ""
+
+    if os.path.isdir(local_file):
+        base_name = os.path.basename(local_file.rstrip('/'))
+        archive_name = f"/tmp/{base_name}.tar.gz"
+        shutil.make_archive(f"/tmp/{base_name}", 'gztar', root_dir=os.path.dirname(local_file), base_dir=base_name)
+        to_send = archive_name
+        cleanup = True
+        unpack_remote = True
+
     if password and shutil.which("sshpass"):
-        cmd = ["sshpass", "-p", password, "scp", "-o", "StrictHostKeyChecking=no", local_file, f"{username}@{host}:{remote_path}"]
+        cmd = ["sshpass", "-p", password, "scp", "-o", "StrictHostKeyChecking=no", to_send, f"{username}@{host}:{remote_path}"]
     else:
-        cmd = ["scp", "-o", "StrictHostKeyChecking=no", local_file, f"{username}@{host}:{remote_path}"]
+        cmd = ["scp", "-o", "StrictHostKeyChecking=no", to_send, f"{username}@{host}:{remote_path}"]
+
     try:
-        print(f"\n[INFO] Отправка {local_file} на {host}:{remote_path} через SCP...")
+        print(f"\n[INFO] Отправка {to_send} на {host}:{remote_path} через SCP...")
         subprocess.run(cmd, check=True)
         print(f"[OK] Файл отправлен на {host}")
+
+        # === Распаковка архива на сервере ===
+        if unpack_remote:
+            archive_remote = os.path.join(remote_path, os.path.basename(to_send))
+            unpack_dir = remote_path
+            unpack_cmds = [
+                f"tar -xzf {archive_remote} -C {unpack_dir}",
+                f"rm {archive_remote}"
+            ]
+            with paramiko.SSHClient() as ssh:
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(hostname=host, username=username, password=password, timeout=5)
+                for cmd in unpack_cmds:
+                    stdin, stdout, stderr = ssh.exec_command(cmd)
+                    stdout.channel.recv_exit_status()
+                ssh.close()
+
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Не удалось отправить файл на {host}: {e}")
+    except Exception as e:
+        print(f"[ERROR] Не удалось распаковать архив на {host}: {e}")
+    finally:
+        if cleanup and os.path.exists(to_send):
+            os.remove(to_send)
 
 # === Выполнение команд ===
 connection_logged = {}
@@ -238,10 +274,15 @@ def execute_commands_on_server(host, port, username, password, command):
                 connection_logged[key] = True
 
             for com in command:
-                full_command = f"echo {password} | sudo -S -p '' {com}" if com.strip().startswith("sudo ") else com
+                if com.strip().startswith("sudo"):
+                    full_command = f"echo '{password}' | sudo -S -p '' {com[len('sudo'):].strip()}"
+                else:
+                    full_command = com
+
                 stdin, stdout, stderr = client.exec_command(full_command, get_pty=True)
-                stdin.write(password + "\n")
-                stdin.flush()
+                if com.strip().startswith("sudo"):
+                    stdin.write(password + "\n")
+                    stdin.flush()
                 output = stdout.read().decode()
                 error = stderr.read().decode()
                 if error and "password" not in error.lower():
@@ -252,6 +293,7 @@ def execute_commands_on_server(host, port, username, password, command):
     except Exception as e:
         logger.error(f"[{host}] Ошибка подключения: {e}")
         return False
+
 
 # === Главное меню ===
 def main_menu(servers, username, password):
