@@ -5,6 +5,7 @@ import logging
 import getpass
 import signal
 import base64
+import shutil
 from datetime import datetime
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
