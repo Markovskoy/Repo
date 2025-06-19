@@ -299,6 +299,7 @@ def execute_commands_on_server(host, port, username, password, command):
         logger.error(f"[{host}] Ошибка подключения: {e}")
         return False
 
+
 # === Главное меню ===
 def main_menu(servers, username, password):
     while True:
