@@ -5,6 +5,7 @@ import logging
 import getpass
 import signal
 import base64
+import shutil
 from datetime import datetime
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,6 +29,7 @@ try:
     from cryptography.fernet import Fernet
 except ImportError:
     missing.append("cryptography")
+
 
 if missing:
     print("[ОШИБКА] Не найдены библиотеки: " + ", ".join(missing))
@@ -78,6 +80,17 @@ def get_or_prompt_password():
     save_password_encrypted(password)
     return password
 
+# === Проверка имени пользователя и получение пароля ===
+def get_username_and_password():
+    current_user = os.getenv("USER") or os.getenv("USERNAME")
+    username = input("Введите имя пользователя: ").strip()
+    saved_password = load_password_encrypted()
+    if username == current_user and saved_password:
+        print("[INFO] Пароль не требуется: пользователь совпадает и пароль уже сохранён.")
+        return username, saved_password
+    password = get_or_prompt_password()
+    return username, password
+
 # === Логгирование ===
 def setup_logging():
     logger = logging.getLogger("multi_ssh")
@@ -93,30 +106,45 @@ def setup_logging():
     logger.addHandler(console_handler)
     return logger
 
-# === Проверка sudo ===
-def check_sudo_access(password):
-    print("\n[INFO] Проверка доступа sudo...")
-    try:
-        result = subprocess.run(["sudo", "-n", "true"], capture_output=True)
-        if result.returncode == 0:
-            print("[OK] Доступ к sudo есть.")
-            return True
-        else:
-            check = subprocess.run(
-                f"echo {password} | sudo -S true",
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-            if check.returncode == 0:
-                print("[OK] Доступ к sudo подтверждён через пароль.")
-                return True
-            else:
-                print("[ОШИБКА] Неверный пароль или нет доступа к sudo.")
-                return False
-    except Exception as e:
-        print(f"[ОШИБКА] Не удалось проверить sudo: {e}")
-        return False
+# === Проверка SSH и sudo ===
+def check_ssh_and_sudo(servers, username, password):
+    accessible = []
+    inaccessible = []
+    no_sudo = []
+    
+    def check_one(server):
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(server['host'], port=server['port'], username=username, password=password, timeout=5)
+            stdin, stdout, stderr = client.exec_command("sudo -n true")
+            exit_code = stdout.channel.recv_exit_status()
+            if exit_code != 0:
+                stdin, stdout, stderr = client.exec_command("sudo -S -v")
+                stdin.write(password + '\n')
+                stdin.flush()
+                if stdout.channel.recv_exit_status() != 0:
+                    no_sudo.append(server)
+                    return
+            accessible.append(server)
+            client.close()
+        except Exception:
+            inaccessible.append(server)
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        executor.map(check_one, servers)
+
+    print(f"\nДоступно по SSH и sudo: {len(accessible)} серверов")
+    if inaccessible:
+        print(f"Недоступны по SSH: {len(inaccessible)}")
+        for s in inaccessible:
+            print(f" - {s['host']}:{s['port']}")
+    if no_sudo:
+        print(f"Нет доступа к sudo: {len(no_sudo)}")
+        for s in no_sudo:
+            print(f" - {s['host']}:{s['port']}")
+
+    return accessible
 
 # === Обработка сигналов ===
 def graceful_exit(signum, frame):
@@ -159,38 +187,78 @@ def load_hosts_from_yaml(filepath):
     return hosts
 
 # === Выбор файла из папки ===
-def choose_local_file():
+def get_all_files_to_send():
     folder = os.path.join(".", "to_remote")
     if not os.path.isdir(folder):
         print("Папка 'to_remote' не найдена.")
-        return None, None
-    files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
-    if not files:
-        print("Нет файлов в папке 'to_remote'.")
-        return None, None
-    print("Доступные файлы:")
-    for i, f in enumerate(files):
-        print(f"{i+1}: {f}")
-    while True:
-        try:
-            idx = int(input("Выберите файл по номеру: ")) - 1
-            if 0 <= idx < len(files):
-                file_path = os.path.join(folder, files[idx])
-                remote_path = input("Куда отправить файл на сервере (например, /usr/local/bin): ").strip()
-                return file_path, remote_path
-        except ValueError:
-            pass
-        print("Некорректный ввод.")
+        return []
+    entries = os.listdir(folder)
+    if not entries:
+        print("Папка 'to_remote' пуста.")
+        return []
+    print("Содержимое папки 'to_remote':")
+    for i, name in enumerate(entries):
+        path = os.path.join(folder, name)
+        icon = "📁" if os.path.isdir(path) else "📄"
+        print(f"{i+1}: {icon} {name}")
+    selected = input("Введите номера файлов через пробел (например: 1 3 5): ").strip()
+    indices = selected.split()
+    chosen = []
+    for idx in indices:
+        if idx.isdigit():
+            i = int(idx) - 1
+            if 0 <= i < len(entries):
+                chosen.append(os.path.join(folder, entries[i]))
+    return chosen
 
-# === Отправка файла по SCP ===
-def send_file_scp(username, host, local_file, remote_path):
-    scp_command = ["scp", local_file, f"{username}@{host}:{remote_path}"]
+# === Отправка файла по SCP с sshpass ===
+def send_file_scp(username, host, local_file, remote_path, password):
+    to_send = local_file
+    cleanup = False
+    unpack_remote = False
+    archive_name = ""
+
+    if os.path.isdir(local_file):
+        base_name = os.path.basename(local_file.rstrip('/'))
+        archive_name = f"/tmp/{base_name}.tar.gz"
+        shutil.make_archive(f"/tmp/{base_name}", 'gztar', root_dir=os.path.dirname(local_file), base_dir=base_name)
+        to_send = archive_name
+        cleanup = True
+        unpack_remote = True
+
+    if password and shutil.which("sshpass"):
+        cmd = ["sshpass", "-p", password, "scp", "-o", "StrictHostKeyChecking=no", to_send, f"{username}@{host}:{remote_path}"]
+    else:
+        cmd = ["scp", "-o", "StrictHostKeyChecking=no", to_send, f"{username}@{host}:{remote_path}"]
+
     try:
-        print(f"\n[INFO] Отправка {local_file} на {host}:{remote_path} через SCP...")
-        subprocess.run(scp_command, check=True)
+        print(f"\n[INFO] Отправка {to_send} на {host}:{remote_path} через SCP...")
+        subprocess.run(cmd, check=True)
         print(f"[OK] Файл отправлен на {host}")
+
+        # === Распаковка архива на сервере ===
+        if unpack_remote:
+            archive_remote = os.path.join(remote_path, os.path.basename(to_send))
+            unpack_dir = remote_path
+            unpack_cmds = [
+                f"tar -xzf {archive_remote} -C {unpack_dir}",
+                f"rm {archive_remote}"
+            ]
+            with paramiko.SSHClient() as ssh:
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.connect(hostname=host, username=username, password=password, timeout=5)
+                for cmd in unpack_cmds:
+                    stdin, stdout, stderr = ssh.exec_command(cmd)
+                    stdout.channel.recv_exit_status()
+                ssh.close()
+
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Не удалось отправить файл на {host}: {e}")
+    except Exception as e:
+        print(f"[ERROR] Не удалось распаковать архив на {host}: {e}")
+    finally:
+        if cleanup and os.path.exists(to_send):
+            os.remove(to_send)
 
 # === Выполнение команд ===
 connection_logged = {}
@@ -206,10 +274,15 @@ def execute_commands_on_server(host, port, username, password, command):
                 connection_logged[key] = True
 
             for com in command:
-                full_command = f"echo {password} | sudo -S -p '' {com}" if com.strip().startswith("sudo ") else com
+                if com.strip().startswith("sudo"):
+                    full_command = f"echo '{password}' | sudo -S -p '' {com[len('sudo'):].strip()}"
+                else:
+                    full_command = com
+
                 stdin, stdout, stderr = client.exec_command(full_command, get_pty=True)
-                stdin.write(password + "\n")
-                stdin.flush()
+                if com.strip().startswith("sudo"):
+                    stdin.write(password + "\n")
+                    stdin.flush()
                 output = stdout.read().decode()
                 error = stderr.read().decode()
                 if error and "password" not in error.lower():
@@ -221,21 +294,24 @@ def execute_commands_on_server(host, port, username, password, command):
         logger.error(f"[{host}] Ошибка подключения: {e}")
         return False
 
+
 # === Главное меню ===
 def main_menu(servers, username, password):
     while True:
         print("""
-1. Отправить файл на сервера
+1. Отправить файлы на сервера
 2. Выполнить команду на серверах
 0. Выход
         """)
         choice = input("Введите номер действия: ").strip()
         if choice == "1":
-            file_path, remote_path = choose_local_file()
-            if not file_path:
+            files = get_all_files_to_send()
+            if not files:
                 continue
+            remote_path = input("Куда отправить файлы на сервере (например, /usr/local/bin): ").strip()
             for server in servers:
-                send_file_scp(username, server['host'], file_path, remote_path)
+                for file_path in files:
+                    send_file_scp(username, server['host'], file_path, remote_path, password)
         elif choice == "2":
             command = input("Введите команду: ").strip()
             if not command:
@@ -255,7 +331,6 @@ def main_menu(servers, username, password):
 
 # === Точка входа ===
 def main():
-    # === Проверка зависимостей ===
     global logger
     logger = setup_logging()
     folder = os.path.join(".", "servers")
@@ -264,12 +339,12 @@ def main():
         sys.exit(1)
     filepath = choose_file(folder)
     servers = load_hosts_from_yaml(filepath)
-    username = input("Введите имя пользователя: ")
-    password = get_or_prompt_password()
-    if not check_sudo_access(password):
-        logger.error("Нет доступа к sudo. Завершение.")
+    username, password = get_username_and_password()
+    filtered = check_ssh_and_sudo(servers, username, password)
+    if not filtered:
+        print("Нет доступных серверов для работы.")
         sys.exit(1)
-    main_menu(servers, username, password)
+    main_menu(filtered, username, password)
 
 if __name__ == "__main__":
     main()
