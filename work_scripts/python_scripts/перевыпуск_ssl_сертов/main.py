@@ -112,7 +112,7 @@ def generate_csr_on_app1(cluster,username, password):
         return out, err
 
     # === Получаем короткое имя ===
-    stdin, stdout, stderr = client.exec_command("hostname | cut -c 2-7")
+    stdin, stdout, stderr = client.exec_command("hostname")
     shortname = stdout.read().decode().strip()
 
     print(f"[i] Генерация CSR для: {shortname}")
@@ -122,6 +122,8 @@ def generate_csr_on_app1(cluster,username, password):
         "mkdir -p /root/keys",
         f"cd /root/keys && sudo openssl req -new -config openssl_srv.cnf -key private.key -out s{shortname}.ru.csr",
         f"cd /root/keys && zip dns_{shortname}.zip s{shortname}.ru.csr openssl_srv.cnf"
+        f"sudo cp /root/keys/dns_{shortname}.zip /tmp/dns_{shortname}.zip",
+        f"sudo chmod 644 /tmp/dns_{shortname}.zip"
     ]
 
     for cmd in commands:
@@ -136,7 +138,7 @@ def generate_csr_on_app1(cluster,username, password):
     local_ca_dir.mkdir(exist_ok=True)
 
     sftp = client.open_sftp()
-    remote_path = f"/root/keys/dns_{shortname}.zip"
+    remote_path = f"/tmp/dns_{shortname}.zip"
     local_path = str(local_ca_dir / f"dns_{shortname}.zip")
     try:
         sftp.get(remote_path, local_path)
