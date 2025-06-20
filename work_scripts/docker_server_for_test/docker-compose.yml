@@ -3,7 +3,12 @@
 services:
   ssh1:
     container_name: ssh1
-    build: ./servers
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
     hostname: ssh_main
     networks:
       net:
@@ -17,43 +22,144 @@ services:
 
   ssh2:
     container_name: ssh2
-    build: ./servers
-    hostname: app1
-    domainname: localdomain.ru
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: 3243app1
     networks:
       net:
         ipv4_address: 172.30.0.11
     ports:
       - "2223:22"
-    volumes:
-      - ssh2-ssh:/home/victor/.ssh
-      - ssh2-pip:/home/victor/.local
-    
+
   ssh3:
     container_name: ssh3
-    build: ./servers
-    hostname: app2
-    domainname: localdomain.ru
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: 3243app2
     networks:
       net:
         ipv4_address: 172.30.0.12
     ports:
       - "2224:22"
-    volumes:
-      - ssh3-ssh:/home/victor/.ssh
-      - ssh3-pip:/home/victor/.local
+
+  ssh4:
+    container_name: ssh4
+    build:
+      context: ./servers
+      args:
+        CREATE_USER: "false"
+    hostname: 6001app1
+    networks:
+      net:
+        ipv4_address: 172.30.0.13
+    ports:
+      - "2225:22"
+
+  ssh5:
+    container_name: ssh5
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: 6001app2
+    networks:
+      net:
+        ipv4_address: 172.30.0.14
+    ports:
+      - "2226:22"
+
+  ssh6:
+    container_name: ssh6
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: 7010app1
+    networks:
+      net:
+        ipv4_address: 172.30.0.15
+    ports:
+      - "2227:22"
+
+  ssh7:
+    container_name: ssh7
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: 7010app2
+    networks:
+      net:
+        ipv4_address: 172.30.0.16
+    ports:
+      - "2228:22"
+
+  ssh8:
+    container_name: ssh8
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: 8800app1
+    networks:
+      net:
+        ipv4_address: 172.30.0.17
+    ports:
+      - "2229:22"
+
+  ssh9:
+    container_name: ssh9
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: pass123
+        CREATE_USER: "true"
+    hostname: 8800app2
+    networks:
+      net:
+        ipv4_address: 172.30.0.18
+    ports:
+      - "2230:22"
+
+  ssh10:
+    container_name: ssh10
+    build:
+      context: ./servers
+      args:
+        USERNAME: victor
+        PASSWORD: 123321
+        CREATE_USER: "true"
+    hostname: testxapp
+    networks:
+      net:
+        ipv4_address: 172.30.0.19
+    ports:
+      - "2231:22"
+
+volumes:
+  ssh1-ssh:
+  ssh1-pip:
 
 networks:
   net:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.30.0.0/16
-
-volumes:
-  ssh1-ssh:
-  ssh2-ssh:
-  ssh3-ssh:
-  ssh1-pip:
-  ssh2-pip:
-  ssh3-pip:
+        - subnet: 172.30.0.0/24
