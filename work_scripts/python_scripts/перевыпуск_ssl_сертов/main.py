@@ -49,8 +49,8 @@ def check_ssh_login(ip, port, username, password):
         print(f"[Ошибка] Неверный логин или пароль для {ip}")
     except paramiko.SSHException as e:
         print(f"[Ошибка] SSH ошибка при подключении к {ip}: {e}")
-    except Exception as e:
-        print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {str(e)}")
+    except Exception:
+        print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — проверьте адрес или сеть.")
     return False
 
 
@@ -175,33 +175,48 @@ def main():
     servers = load_servers("./servers/servers.yaml")
     print(f"Сервера загружены: {servers}")
     first_ip, first_port = servers[0].strip().split()
-    while True:
+    MAX_ATTEMPTS = 3
+    attempt = 0
+    while attempt < MAX_ATTEMPTS:
         username = input("Введите логин для SSH:")
         password = getpass.getpass("Введите пароль для SSH:")
         if check_ssh_login(first_ip, int(first_port), username, password):
             break
-        print("Попробуйте ещё раз.\n")
+        attempt += 1
+        print("Неверный логин или пароль. Попробуйте ещё раз.\n")
+
+    if attempt == MAX_ATTEMPTS:
+        print("[ОШИБКА] Превышено количество попыток подключения.")
+        sys.exit(1)
+
+    connected = False
     unreachable_servers = []
+
     for line in servers:
         ip, port = line.strip().split()
-        hostname = get_hostname(ip, int(port), username, password)
-        if not hostname:
+        try:
+            hostname = get_hostname(ip, int(port), username, password)
+            if not connected:
+                print("[✓] Подключение прошло успешно.")
+                connected = True
+        except Exception:
+            unreachable_servers.append(ip)
             continue
 
-        app1_name = hostname.split('.')[0]  # app1
+        app1_name = hostname.split('.')[0]
         print(f"[+] Получено имя: {app1_name} от {ip}")
-
         cluster = find_all_app(app1_name, username, password, int(port))
         print("=== Обнаруженный кластер ===")
         for role, info in cluster.items():
             print(f"{role}: {info['hostname']}")
+      
     if unreachable_servers:
         print(f"\n[!] Не удалось подключиться к {len(unreachable_servers)} сервер(ам):")
-        for ip in unreachable_servers:
-            print(f" - {ip}")
+    for ip in unreachable_servers:
+        print(f" - {ip}")
     else:
-        print("\n[✓] Все серверы доступны.")
-        
+        print("\n[✓] Все серверы доступны.")   
+         
     choise = menu()
     if choise == "1":
         print("Генерация CA")
