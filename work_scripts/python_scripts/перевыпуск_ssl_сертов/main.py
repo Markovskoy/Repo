@@ -47,6 +47,10 @@ def get_hostname(ip, port, username, password):
         output = stdout.read().decode().strip()
         client.close()
         return output
+    except paramiko.AuthenticationException:
+        print(f"[Ошиька] Неверный логин или пароль для {ip}")
+    except paramiko.SSHException as e: 
+        print(f"[Ошибка] SSH ошибка при подключении к {ip}: {e}")
     except Exception as e:
         print(f"[Ошибка] не удалось подключиться к {ip}:{port} - {e}")
         return None
