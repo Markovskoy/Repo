@@ -38,22 +38,32 @@ def load_servers(filepath):
         sys.exit(1)
     return data['servers']
 
-def get_hostname(ip, port, username, password):
+def check_ssh_login(ip, port, username, password):
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     try:
         client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
-        stdin, stdout, stderr = client.exec_command("hostname -f")
-        output = stdout.read().decode().strip()
         client.close()
-        return output
+        return True
     except paramiko.AuthenticationException:
-        print(f"[Ошиька] Неверный логин или пароль для {ip}")
-    except paramiko.SSHException as e: 
+        print(f"[Ошибка] Неверный логин или пароль для {ip}")
+    except paramiko.SSHException as e:
         print(f"[Ошибка] SSH ошибка при подключении к {ip}: {e}")
     except Exception as e:
-        print(f"[Ошибка] не удалось подключиться к {ip}:{port} - {e}")
-        return None
+        print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {str(e)}")
+    return False
+
+
+def get_hostname(ip, port, username, password):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
+    stdin, stdout, stderr = client.exec_command("hostname -f")
+    output = stdout.read().decode().strip()
+    client.close()
+    return output
+
+
 
 def find_all_app(app1_name, username, password, port=22, max_apps=5):
     cluster = {}
@@ -164,10 +174,14 @@ def menu():
 def main():
     servers = load_servers("./servers/servers.yaml")
     print(f"Сервера загружены: {servers}")
-
-    username = input("Введите логин для SSH:")
-    password = getpass.getpass("Введите пароль для SSH:")
-    
+    first_ip, first_port = servers[0].strip().split()
+    while True:
+        username = input("Введите логин для SSH:")
+        password = getpass.getpass("Введите пароль для SSH:")
+        if check_ssh_login(first_ip, int(first_port), username, password):
+            break
+        print("Попробуйте ещё раз.\n")
+    unreachable_servers = []
     for line in servers:
         ip, port = line.strip().split()
         hostname = get_hostname(ip, int(port), username, password)
@@ -181,7 +195,13 @@ def main():
         print("=== Обнаруженный кластер ===")
         for role, info in cluster.items():
             print(f"{role}: {info['hostname']}")
-
+    if unreachable_servers:
+        print(f"\n[!] Не удалось подключиться к {len(unreachable_servers)} сервер(ам):")
+        for ip in unreachable_servers:
+            print(f" - {ip}")
+    else:
+        print("\n[✓] Все серверы доступны.")
+        
     choise = menu()
     if choise == "1":
         print("Генерация CA")
