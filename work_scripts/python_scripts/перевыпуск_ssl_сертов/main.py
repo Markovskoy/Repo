@@ -129,8 +129,12 @@ def generate_csr_on_app1(cluster, username, password):
 
         print(f"[i] Генерация CSR для: {shortname}")
 
+        # Проверка наличия конфигурационного файла и ключа
+        run_sudo_command("sudo mkdir -p /root/keys")
+        run_sudo_command("[ -f /root/keys/openssl_srv.cnf ] || echo '[ req ]\nprompt = no\ndistinguished_name = dn\n[ dn ]\nCN = example.com' | sudo tee /root/keys/openssl_srv.cnf > /dev/null")
+        run_sudo_command("[ -f /root/keys/private.key ] || sudo openssl genrsa -out /root/keys/private.key 2048")
+
         commands = [
-            "sudo mkdir -p /root/keys",
             f"sudo openssl req -new -config /root/keys/openssl_srv.cnf -key /root/keys/private.key -out /root/keys/s{shortname}.ru.csr",
             f"sudo zip /root/keys/dns_{shortname}.zip /root/keys/s{shortname}.ru.csr /root/keys/openssl_srv.cnf",
             f"sudo cp /root/keys/dns_{shortname}.zip /tmp/dns_{shortname}.zip",
@@ -214,6 +218,7 @@ def main():
 
             all_clusters.append(cluster)
         except Exception as e:
+            tqdm.write("\n" + "-" * 60)
             tqdm.write(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {e}")
             unreachable.append(ip)
 
