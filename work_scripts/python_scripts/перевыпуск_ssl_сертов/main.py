@@ -129,9 +129,8 @@ def generate_csr_on_app1(cluster, username, password):
 
         print(f"[i] Генерация CSR для: {shortname}")
 
-        # Проверка наличия конфигурационного файла и ключа
         run_sudo_command("sudo mkdir -p /root/keys")
-        run_sudo_command("[ -f /root/keys/openssl_srv.cnf ] || echo '[ req ]\nprompt = no\ndistinguished_name = dn\n[ dn ]\nCN = example.com' | sudo tee /root/keys/openssl_srv.cnf > /dev/null")
+        run_sudo_command("[ -f /root/keys/openssl_srv.cnf ] || echo '[ req ]\\nprompt = no\\ndistinguished_name = dn\\n[ dn ]\\nCN = example.com' | sudo tee /root/keys/openssl_srv.cnf > /dev/null")
         run_sudo_command("[ -f /root/keys/private.key ] || sudo openssl genrsa -out /root/keys/private.key 2048")
 
         commands = [
@@ -147,7 +146,7 @@ def generate_csr_on_app1(cluster, username, password):
                 print(f"[+] Выполнено: {cmd}")
             else:
                 print(f"[!] Ошибка при выполнении: {cmd}")
-                print("[!] Прерывание генерации для этого сервера.\n")
+                print(f"[!] Прерывание генерации для сервера {shortname}.")
                 client.close()
                 break
         else:
@@ -175,7 +174,15 @@ def menu():
     return choise.strip()
 
 def main():
+    import signal
     from tqdm import tqdm
+
+    def handle_exit(signum, frame):
+        print("\n[!] Завершение по Ctrl+C")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, handle_exit)
+
     servers = load_servers("./servers/servers.yaml")
     print(f"Сервера загружены: {servers}")
 
