@@ -33,7 +33,7 @@ if missing:
 def validate_ascii(s):
     try:
         s.encode("utf-8")
-        return all(ord(c) < 128 for c in s)  # ASCII check
+        return all(ord(c) < 128 for c in s)
     except UnicodeEncodeError:
         return False
 
@@ -77,14 +77,24 @@ def find_all_app(app1_name, username, password, port=22, max_apps=5):
         client.close()
         return ip
 
-    base = app1_name.replace('app1', 'app{}')
+    base = app1_name.replace('app1', 'app{}') if 'app1' in app1_name else None
 
     for i in range(1, max_apps + 1):
         role = f'app{i}'
-        hostname_try = app1_name if i == 1 else base.format(i)
+        if i == 1:
+            hostname_try = app1_name
+        elif base:
+            hostname_try = base.format(i)
+        else:
+            break
+
         try:
             ip = connect_and_get_ip(hostname_try)
             cluster[role] = {'hostname': hostname_try, 'ip': ip}
+        except socket.gaierror:
+            break  # сервер не существует, не выводим ошибку
+        except paramiko.AuthenticationException as e:
+            unreachable_nodes.append((role, hostname_try, "Authentication failed."))
         except Exception as e:
             unreachable_nodes.append((role, hostname_try, str(e)))
 
@@ -175,8 +185,10 @@ def main():
         print("Неверный логин или пароль. Попробуйте ещё раз.\n")
 
     unreachable = []
+    auth_failed_nodes = []
 
-    for line in servers:
+    print("\n[⏳] Поиск кластеров и хостов...")
+    for line in tqdm(servers, desc="Обработка серверов"):
         ip, port = line.strip().split()
         try:
             hostname = get_hostname(ip, int(port), username, password)
@@ -189,14 +201,18 @@ def main():
                 print(f"{role}: {info['hostname']} ({info['ip']})")
             for role, host, reason in cluster_errors:
                 print(f"[!] {role}: {host} — ошибка подключения: {reason}")
+                if reason == "Authentication failed.":
+                    auth_failed_nodes.append(f"{role}: {host}")
         except Exception as e:
             print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {e}")
             unreachable.append(ip)
 
-    if unreachable:
-        print(f"\n[!] Не удалось подключиться к {len(unreachable)} сервер(ам):")
+    if unreachable or auth_failed_nodes:
+        print(f"\n[!] Не удалось подключиться к {len(unreachable) + len(auth_failed_nodes)} узлам:")
         for ip in unreachable:
             print(f" - {ip}")
+        for node in auth_failed_nodes:
+            print(f" - {node}")
     else:
         print("\n[✓] Все серверы доступны.")
 
