@@ -52,13 +52,8 @@ def check_ssh_login(ip, port, username, password):
         client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
         client.close()
         return True
-    except paramiko.AuthenticationException:
-        print(f"[Ошибка] Неверный логин или пароль для {ip}")
-    except paramiko.SSHException as e:
-        print(f"[Ошибка] SSH ошибка при подключении к {ip}: {e}")
     except Exception:
-        print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — проверьте адрес или сеть.")
-    return False
+        return False
 
 def get_hostname(ip, port, username, password):
     client = paramiko.SSHClient()
@@ -71,6 +66,7 @@ def get_hostname(ip, port, username, password):
 
 def find_all_app(app1_name, username, password, port=22, max_apps=5):
     cluster = {}
+    unreachable_nodes = []
 
     def connect_and_get_ip(hostname):
         client = paramiko.SSHClient()
@@ -81,21 +77,18 @@ def find_all_app(app1_name, username, password, port=22, max_apps=5):
         client.close()
         return ip
 
-    try:
-        ip1 = connect_and_get_ip(app1_name)
-        cluster['app1'] = {'hostname': app1_name, 'ip': ip1}
-    except Exception as e:
-        return cluster
-
     base = app1_name.replace('app1', 'app{}')
-    for i in range(2, max_apps + 1):
-        hostname_try = base.format(i)
+
+    for i in range(1, max_apps + 1):
+        role = f'app{i}'
+        hostname_try = app1_name if i == 1 else base.format(i)
         try:
             ip = connect_and_get_ip(hostname_try)
-            cluster[f'app{i}'] = {'hostname': hostname_try, 'ip': ip}
-        except Exception:
-            break
-    return cluster
+            cluster[role] = {'hostname': hostname_try, 'ip': ip}
+        except Exception as e:
+            unreachable_nodes.append((role, hostname_try, str(e)))
+
+    return cluster, unreachable_nodes
 
 def generate_csr_on_app1(cluster, username, password):
     app1 = cluster.get('app1')
@@ -168,9 +161,7 @@ def main():
     print(f"Сервера загружены: {servers}")
 
     first_ip, first_port = servers[0].strip().split()
-    MAX_ATTEMPTS = 3
-    attempt = 0
-    while attempt < MAX_ATTEMPTS:
+    while True:
         username = input("Введите логин для SSH:")
         password = getpass.getpass("Введите пароль для SSH:")
 
@@ -181,29 +172,26 @@ def main():
         if check_ssh_login(first_ip, int(first_port), username, password):
             break
 
-        attempt += 1
         print("Неверный логин или пароль. Попробуйте ещё раз.\n")
 
-    else:
-        print("[ОШИБКА] Превышено количество попыток подключения.")
-        sys.exit(1)
-
     unreachable = []
+
     for line in servers:
         ip, port = line.strip().split()
         try:
             hostname = get_hostname(ip, int(port), username, password)
-        except Exception:
+            print(f"[+] Получено имя: {hostname} от {ip}")
+            app1_name = hostname.split('.')[0]
+            cluster, cluster_errors = find_all_app(app1_name, username, password, int(port))
+
+            print("=== Обнаруженный кластер ===")
+            for role, info in cluster.items():
+                print(f"{role}: {info['hostname']} ({info['ip']})")
+            for role, host, reason in cluster_errors:
+                print(f"[!] {role}: {host} — ошибка подключения: {reason}")
+        except Exception as e:
+            print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {e}")
             unreachable.append(ip)
-            continue
-
-        app1_name = hostname.split('.')[0]
-        print(f"[+] Получено имя: {app1_name} от {ip}")
-        cluster = find_all_app(app1_name, username, password, int(port))
-
-        print("=== Обнаруженный кластер ===")
-        for role, info in cluster.items():
-            print(f"{role}: {info['hostname']} ({info['ip']})")
 
     if unreachable:
         print(f"\n[!] Не удалось подключиться к {len(unreachable)} сервер(ам):")
