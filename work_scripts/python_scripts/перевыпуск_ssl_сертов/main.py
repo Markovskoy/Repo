@@ -92,8 +92,8 @@ def find_all_app(app1_name, username, password, port=22, max_apps=5):
             ip = connect_and_get_ip(hostname_try)
             cluster[role] = {'hostname': hostname_try, 'ip': ip}
         except socket.gaierror:
-            break  # сервер не существует, не выводим ошибку
-        except paramiko.AuthenticationException as e:
+            break
+        except paramiko.AuthenticationException:
             unreachable_nodes.append((role, hostname_try, "Authentication failed."))
         except Exception as e:
             unreachable_nodes.append((role, hostname_try, str(e)))
@@ -101,62 +101,66 @@ def find_all_app(app1_name, username, password, port=22, max_apps=5):
     return cluster, unreachable_nodes
 
 def generate_csr_on_app1(cluster, username, password):
-    app1 = cluster.get('app1')
-    if not app1:
-        print("[Ошибка] В кластере нет app1")
-        return
-    hostname = app1['hostname']
-    ip = app1['ip']
-    port = 22
+    for name, app in cluster.items():
+        if name != "app1":
+            continue
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
-    except Exception as e:
-        print(f"[ОШИБКА] Не удалось подключиться к APP1 ({hostname}) → {e}")
-        return
+        print("\n" + "-" * 60)
+        hostname = app['hostname']
+        ip = app['ip']
+        port = 22
 
-    def run_sudo_command(cmd):
-        stdin, stdout, stderr = client.exec_command(f"sudo -S -p '' {cmd}", get_pty=True)
-        stdin.write(password + '\n')
-        stdin.flush()
-        return stdout.channel.recv_exit_status()
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
+        except Exception as e:
+            print(f"[ОШИБКА] Не удалось подключиться к APP1 ({hostname}) → {e}")
+            continue
 
-    stdin, stdout, stderr = client.exec_command("hostname")
-    shortname = stdout.read().decode().strip()
+        def run_sudo_command(cmd):
+            stdin, stdout, stderr = client.exec_command(f"sudo -S -p '' {cmd}", get_pty=True)
+            stdin.write(password + '\n')
+            stdin.flush()
+            return stdout.channel.recv_exit_status()
 
-    print(f"[i] Генерация CSR для: {shortname}")
+        stdin, stdout, stderr = client.exec_command("hostname")
+        shortname = stdout.read().decode().strip()
 
-    commands = [
-        "sudo mkdir -p /root/keys",
-        f"sudo openssl req -new -config /root/keys/openssl_srv.cnf -key /root/keys/private.key -out /root/keys/s{shortname}.ru.csr",
-        f"sudo zip /root/keys/dns_{shortname}.zip /root/keys/s{shortname}.ru.csr /root/keys/openssl_srv.cnf",
-        f"sudo cp /root/keys/dns_{shortname}.zip /tmp/dns_{shortname}.zip",
-        f"sudo chmod 644 /tmp/dns_{shortname}.zip"
-    ]
+        print(f"[i] Генерация CSR для: {shortname}")
 
-    for cmd in commands:
-        result = run_sudo_command(cmd)
-        if result == 0:
-            print(f"[+] Выполнено: {cmd}")
+        commands = [
+            "sudo mkdir -p /root/keys",
+            f"sudo openssl req -new -config /root/keys/openssl_srv.cnf -key /root/keys/private.key -out /root/keys/s{shortname}.ru.csr",
+            f"sudo zip /root/keys/dns_{shortname}.zip /root/keys/s{shortname}.ru.csr /root/keys/openssl_srv.cnf",
+            f"sudo cp /root/keys/dns_{shortname}.zip /tmp/dns_{shortname}.zip",
+            f"sudo chmod 644 /tmp/dns_{shortname}.zip"
+        ]
+
+        for cmd in commands:
+            result = run_sudo_command(cmd)
+            if result == 0:
+                print(f"[+] Выполнено: {cmd}")
+            else:
+                print(f"[!] Ошибка при выполнении: {cmd}")
+                print("[!] Прерывание генерации для этого сервера.\n")
+                client.close()
+                break
         else:
-            print(f"[!] Ошибка при выполнении: {cmd}")
+            local_ca_dir = pathlib.Path("CA")
+            local_ca_dir.mkdir(exist_ok=True)
 
-    local_ca_dir = pathlib.Path("CA")
-    local_ca_dir.mkdir(exist_ok=True)
-
-    sftp = client.open_sftp()
-    remote_path = f"/tmp/dns_{shortname}.zip"
-    local_path = str(local_ca_dir / f"dns_{shortname}.zip")
-    try:
-        sftp.get(remote_path, local_path)
-        print(f"[✓] Архив скачан в: {local_path}")
-    except Exception as e:
-        print(f"[ОШИБКА] Не удалось скачать архив: {e}")
-    finally:
-        sftp.close()
-        client.close()
+            sftp = client.open_sftp()
+            remote_path = f"/tmp/dns_{shortname}.zip"
+            local_path = str(local_ca_dir / f"dns_{shortname}.zip")
+            try:
+                sftp.get(remote_path, local_path)
+                print(f"[✓] Архив скачан в: {local_path}")
+            except Exception as e:
+                print(f"[ОШИБКА] Не удалось скачать архив: {e}")
+            finally:
+                sftp.close()
+                client.close()
 
 def menu():
     print("""
@@ -167,6 +171,7 @@ def menu():
     return choise.strip()
 
 def main():
+    from tqdm import tqdm
     servers = load_servers("./servers/servers.yaml")
     print(f"Сервера загружены: {servers}")
 
@@ -186,25 +191,30 @@ def main():
 
     unreachable = []
     auth_failed_nodes = []
+    all_clusters = []
 
     print("\n[⏳] Поиск кластеров и хостов...")
-    for line in tqdm(servers, desc="Обработка серверов"):
+    progress = tqdm(servers, desc="Обработка серверов")
+    for line in progress:
         ip, port = line.strip().split()
         try:
             hostname = get_hostname(ip, int(port), username, password)
-            print(f"[+] Получено имя: {hostname} от {ip}")
+            tqdm.write("\n" + "-" * 60)
+            tqdm.write(f"[+] Получено имя: {hostname} от {ip}")
             app1_name = hostname.split('.')[0]
             cluster, cluster_errors = find_all_app(app1_name, username, password, int(port))
 
-            print("=== Обнаруженный кластер ===")
+            tqdm.write("=== Обнаруженный кластер ===")
             for role, info in cluster.items():
-                print(f"{role}: {info['hostname']} ({info['ip']})")
+                tqdm.write(f"{role}: {info['hostname']} ({info['ip']})")
             for role, host, reason in cluster_errors:
-                print(f"[!] {role}: {host} — ошибка подключения: {reason}")
+                tqdm.write(f"[!] {role}: {host} — ошибка подключения: {reason}")
                 if reason == "Authentication failed.":
                     auth_failed_nodes.append(f"{role}: {host}")
+
+            all_clusters.append(cluster)
         except Exception as e:
-            print(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {e}")
+            tqdm.write(f"[Ошибка] Не удалось подключиться к {ip}:{port} — {e}")
             unreachable.append(ip)
 
     if unreachable or auth_failed_nodes:
@@ -219,7 +229,8 @@ def main():
     choise = menu()
     if choise == "1":
         print("Генерация CA")
-        generate_csr_on_app1(cluster, username, password)
+        for cluster in all_clusters:
+            generate_csr_on_app1(cluster, username, password)
     elif choise == "2":
         print("Применение серта")
     else:
