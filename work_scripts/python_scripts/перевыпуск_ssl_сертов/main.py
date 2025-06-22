@@ -10,7 +10,7 @@ import socket
 import re
 import collections
 
-# === Проверка зависимостей ===
+#Проверка зависимостей
 missing = []
 try:
     import yaml
@@ -30,6 +30,7 @@ if missing:
     print("Установите зависимости командой:\n\npip install -r requirements.txt\n")
     sys.exit(1)
 
+#Вспомогательные функции
 def validate_ascii(s):
     try:
         s.encode("utf-8")
@@ -45,61 +46,13 @@ def load_servers(filepath):
         sys.exit(1)
     return data['servers']
 
-def check_ssh_login(ip, port, username, password):
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    try:
-        client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
-        client.close()
-        return True
-    except Exception:
-        return False
+def exec_sudo_cmd(client, cmd, password):
+    stdin, stdout, stderr = client.exec_command(f"sudo -S -p '' {cmd}", get_pty=True)
+    stdin.write(password + '\n')
+    stdin.flush()
+    return stdout.channel.recv_exit_status()
 
-def get_hostname(ip, port, username, password):
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
-    stdin, stdout, stderr = client.exec_command("hostname -f")
-    output = stdout.read().decode(errors="ignore").strip()
-    client.close()
-    return output
-
-def find_all_app(app1_name, username, password, port=22, max_apps=5):
-    cluster = {}
-    unreachable_nodes = []
-
-    def connect_and_get_ip(hostname):
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(hostname=hostname, port=port, username=username, password=password, timeout=5)
-        stdin, stdout, stderr = client.exec_command("hostname -I")
-        ip = stdout.read().decode().strip().split()[0]
-        client.close()
-        return ip
-
-    base = app1_name.replace('app1', 'app{}') if 'app1' in app1_name else None
-
-    for i in range(1, max_apps + 1):
-        role = f'app{i}'
-        if i == 1:
-            hostname_try = app1_name
-        elif base:
-            hostname_try = base.format(i)
-        else:
-            break
-
-        try:
-            ip = connect_and_get_ip(hostname_try)
-            cluster[role] = {'hostname': hostname_try, 'ip': ip}
-        except socket.gaierror:
-            break
-        except paramiko.AuthenticationException:
-            unreachable_nodes.append((role, hostname_try, "Authentication failed."))
-        except Exception as e:
-            unreachable_nodes.append((role, hostname_try, str(e)))
-
-    return cluster, unreachable_nodes
-
+#Генерация CSR
 def generate_csr_on_app1(cluster, username, password):
     for name, app in cluster.items():
         if name != "app1":
@@ -165,6 +118,170 @@ def generate_csr_on_app1(cluster, username, password):
                 sftp.close()
                 client.close()
 
+#SSH логин и кластер
+def check_ssh_login(ip, port, username, password):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
+        client.close()
+        return True
+    except Exception:
+        return False
+
+def get_hostname(ip, port, username, password):
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(hostname=ip, port=port, username=username, password=password, timeout=10)
+    stdin, stdout, stderr = client.exec_command("hostname -f")
+    output = stdout.read().decode(errors="ignore").strip()
+    client.close()
+    return output
+
+def find_all_app(app1_name, username, password, port=22, max_apps=5):
+    cluster = {}
+    unreachable_nodes = []
+
+    def connect_and_get_ip(hostname):
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(hostname=hostname, port=port, username=username, password=password, timeout=5)
+        stdin, stdout, stderr = client.exec_command("hostname -I")
+        ip = stdout.read().decode().strip().split()[0]
+        client.close()
+        return ip
+
+    base = app1_name.replace('app1', 'app{}') if 'app1' in app1_name else None
+
+    for i in range(1, max_apps + 1):
+        role = f'app{i}'
+        if i == 1:
+            hostname_try = app1_name
+        elif base:
+            hostname_try = base.format(i)
+        else:
+            break
+
+        try:
+            ip = connect_and_get_ip(hostname_try)
+            cluster[role] = {'hostname': hostname_try, 'ip': ip}
+        except socket.gaierror:
+            break
+        except paramiko.AuthenticationException:
+            unreachable_nodes.append((role, hostname_try, "Authentication failed."))
+        except Exception as e:
+            unreachable_nodes.append((role, hostname_try, str(e)))
+
+    return cluster, unreachable_nodes
+
+#Применение сертификата
+def apply_signed_certificate(cluster, username, password):
+    for name, app in cluster.items():
+        if name != "app1":
+            continue
+
+        print("\n" + "-" * 60)
+        hostname = app['hostname']
+        ip = app['ip']
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(hostname=ip, username=username, password=password, timeout=10)
+        except Exception as e:
+            print(f"[ОШИБКА] Не удалось подключиться к APP1 ({hostname}) → {e}")
+            continue
+
+        sftp = client.open_sftp()
+        stdin, stdout, stderr = client.exec_command("hostname")
+        shortname = stdout.read().decode().strip()
+
+        csr_file = pathlib.Path(f"./cer/s{shortname}.ru.csr")
+        if not csr_file.exists():
+            print(f"[ОШИБКА] Не найден файл сертификата: {csr_file}")
+            client.close()
+            continue
+
+        try:
+            sftp.put(str(csr_file), f"/root/keys/s{shortname}.ru.csr")
+            print(f"[+] Отправлен: s{shortname}.ru.csr")
+        except Exception as e:
+            print(f"[ОШИБКА] Не удалось загрузить сертификат: {e}")
+            client.close()
+            continue
+
+        commands = [
+            "cd /root/keys",
+            "wget -c http://ca.corp.tander.ru/pki/CA.zip",
+            "unzip -o ./CA.zip",
+            "openssl x509 -inform der -in ./CA/TanderRootCA.crt -out ./TanderRootCA.pem",
+            "rm -f /root/keys/bundle.pem",
+            f"cat ./s{shortname}.ru.csr >> ./bundle.pem && cat CA/TanderCorpCA.crt >> ./bundle.pem && cat ./TanderRootCA.pem >> ./bundle.pem",
+            f"cp ./bundle.pem /etc/nginx/conf.d/ssl/ && cp ./s{shortname}.ru.csr /etc/nginx/conf.d/ssl/cert.pem && cp ./private.key /etc/nginx/conf.d/ssl/",
+            "ls -ltr /etc/nginx/conf.d/ssl/",
+            "nginx -t"
+        ]
+
+        success = True
+        for cmd in commands:
+            exit_code = exec_sudo_cmd(client, cmd, password)
+            if exit_code != 0:
+                print(f"[!] Ошибка при выполнении: {cmd}")
+                success = False
+                break
+            else:
+                print(f"[+] Выполнено: {cmd}")
+
+        if success:
+            print("[✓] Конфигурация nginx проверена. Применяем изменения...")
+            reload_code = exec_sudo_cmd(client, "nginx -s reload", password)
+            if reload_code == 0:
+                print("[✓] Nginx перезапущен успешно.")
+                print("[!] Проверьте, что сертификат подхватился через браузер из АРМ РЦ.")
+            else:
+                print("[ОШИБКА] Не удалось перезапустить nginx.")
+
+        client.close()
+
+        for node_name, node_data in cluster.items():
+            if node_name == "app1":
+                continue
+
+            print("\n" + f"[→] Копируем сертификаты на {node_name} ({node_data['hostname']})")
+            ip2 = node_data['ip']
+            try:
+                c2 = paramiko.SSHClient()
+                c2.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                c2.connect(hostname=ip2, username=username, password=password, timeout=10)
+                sftp2 = c2.open_sftp()
+                sftp2.put(str(csr_file), f"/root/keys/s{shortname}.ru.csr")
+                sftp2.put("/etc/nginx/conf.d/ssl/bundle.pem", "/root/keys/bundle.pem")
+                sftp2.put("/etc/nginx/conf.d/ssl/private.key", "/root/keys/private.key")
+                print("[+] Сертификаты отправлены")
+
+                cmds2 = [
+                    "cp /root/keys/bundle.pem /etc/nginx/conf.d/ssl/",
+                    f"cp /root/keys/s{shortname}.ru.csr /etc/nginx/conf.d/ssl/cert.pem",
+                    "cp /root/keys/private.key /etc/nginx/conf.d/ssl/",
+                    "ls -ltr /etc/nginx/conf.d/ssl/",
+                    "nginx -t"
+                ]
+
+                ok = True
+                for c in cmds2:
+                    if exec_sudo_cmd(c2, c, password) != 0:
+                        print(f"[!] Ошибка: {c}")
+                        ok = False
+                        break
+                if ok:
+                    exec_sudo_cmd(c2, "nginx -s reload", password)
+                    print(f"[✓] Nginx на {node_name} успешно перезапущен")
+                sftp2.close()
+                c2.close()
+            except Exception as e:
+                print(f"[ОШИБКА] Не удалось скопировать на {node_name} → {e}")
+
+#Меню и main
 def menu():
     print("""
 Выберите действие:
@@ -240,11 +357,11 @@ def main():
 
     choise = menu()
     if choise == "1":
-        print("Генерация CA")
         for cluster in all_clusters:
             generate_csr_on_app1(cluster, username, password)
     elif choise == "2":
-        print("Применение серта")
+        for cluster in all_clusters:
+            apply_signed_certificate(cluster, username, password)
     else:
         print("Неверная цифра")
 
